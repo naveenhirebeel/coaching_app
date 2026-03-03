@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-type Student = { id: string; name: string; parent_name: string; parent_telegram_chat_id: string; batches?: { name: string } }
+type Student = { id: string; name: string; parent_name: string; parent_telegram_chat_id: string; batch_id: string; batches?: { name: string } }
 type Batch = { id: string; name: string; subject: string }
 
 export default function StudentsPage() {
@@ -15,6 +15,31 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({})
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', parent_name: '', parent_telegram_chat_id: '', batch_id: '' })
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError] = useState('')
+
+  function startEdit(s: Student) {
+    setEditingId(s.id)
+    setEditForm({ name: s.name, parent_name: s.parent_name || '', parent_telegram_chat_id: s.parent_telegram_chat_id || '', batch_id: s.batch_id || '' })
+    setEditError('')
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    setEditLoading(true); setEditError('')
+    const res = await fetch('/api/students', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ id: editingId, ...editForm }),
+    })
+    const data = await res.json()
+    setEditLoading(false)
+    if (!res.ok) return setEditError(data.error)
+    setEditingId(null)
+    load()
+  }
 
   async function sendTest(chatId: string, name: string, studentId: string) {
     setTestStatus(prev => ({ ...prev, [studentId]: { ok: false, msg: 'Sending...' } }))
@@ -106,26 +131,55 @@ export default function StudentsPage() {
         <div className="space-y-3">
           {students.map(s => (
             <div key={s.id} className="bg-white rounded-xl shadow-sm p-4">
-              <p className="font-semibold text-gray-900">{s.name}</p>
-              {s.parent_name && <p className="text-sm text-gray-500">Parent: {s.parent_name}</p>}
-              {s.batches?.name && <p className="text-xs text-blue-600 mt-1">Batch: {s.batches.name}</p>}
-              <div className="flex items-center justify-between mt-1">
-                <p className={`text-xs ${s.parent_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
-                  {s.parent_telegram_chat_id ? 'Telegram alerts active' : 'No Telegram set up'}
-                </p>
-                {s.parent_telegram_chat_id && (
-                  <button
-                    onClick={() => sendTest(s.parent_telegram_chat_id, s.parent_name || s.name, s.id)}
-                    className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100"
-                  >
-                    Send Test
-                  </button>
-                )}
-              </div>
-              {testStatus[s.id] && (
-                <p className={`text-xs mt-1 ${testStatus[s.id].ok ? 'text-green-600' : 'text-red-600'}`}>
-                  {testStatus[s.id].msg}
-                </p>
+              {editingId === s.id ? (
+                <form onSubmit={handleEdit} className="space-y-3">
+                  {editError && <p className="text-red-600 text-sm">{editError}</p>}
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Student name"
+                    value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} required />
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent name"
+                    value={editForm.parent_name} onChange={e => setEditForm({ ...editForm, parent_name: e.target.value })} />
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent Telegram Chat ID"
+                    value={editForm.parent_telegram_chat_id} onChange={e => setEditForm({ ...editForm, parent_telegram_chat_id: e.target.value })} />
+                  <select className="w-full border rounded-lg px-3 py-2 text-sm"
+                    value={editForm.batch_id} onChange={e => setEditForm({ ...editForm, batch_id: e.target.value })} required>
+                    <option value="">Select Batch</option>
+                    {batches.map(b => <option key={b.id} value={b.id}>{b.name} - {b.subject}</option>)}
+                  </select>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={editLoading}
+                      className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                      {editLoading ? 'Saving...' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => setEditingId(null)}
+                      className="flex-1 border py-2 rounded-lg text-sm text-gray-600">Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between">
+                    <p className="font-semibold text-gray-900">{s.name}</p>
+                    <button onClick={() => startEdit(s)}
+                      className="text-xs text-gray-400 hover:text-green-600 ml-2">Edit</button>
+                  </div>
+                  {s.parent_name && <p className="text-sm text-gray-500">Parent: {s.parent_name}</p>}
+                  {s.batches?.name && <p className="text-xs text-blue-600 mt-1">Batch: {s.batches.name}</p>}
+                  <div className="flex items-center justify-between mt-1">
+                    <p className={`text-xs ${s.parent_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
+                      {s.parent_telegram_chat_id ? 'Telegram alerts active' : 'No Telegram set up'}
+                    </p>
+                    {s.parent_telegram_chat_id && (
+                      <button onClick={() => sendTest(s.parent_telegram_chat_id, s.parent_name || s.name, s.id)}
+                        className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100">
+                        Send Test
+                      </button>
+                    )}
+                  </div>
+                  {testStatus[s.id] && (
+                    <p className={`text-xs mt-1 ${testStatus[s.id].ok ? 'text-green-600' : 'text-red-600'}`}>
+                      {testStatus[s.id].msg}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           ))}

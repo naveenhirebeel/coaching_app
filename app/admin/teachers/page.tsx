@@ -13,6 +13,31 @@ export default function TeachersPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({})
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', phone: '', telegram_chat_id: '' })
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError] = useState('')
+
+  function startEdit(t: Teacher) {
+    setEditingId(t.id)
+    setEditForm({ name: t.name, phone: t.phone, telegram_chat_id: t.telegram_chat_id || '' })
+    setEditError('')
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    setEditLoading(true); setEditError('')
+    const res = await fetch('/api/teachers', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ id: editingId, ...editForm }),
+    })
+    const data = await res.json()
+    setEditLoading(false)
+    if (!res.ok) return setEditError(data.error)
+    setEditingId(null)
+    load()
+  }
 
   async function sendTest(chatId: string, name: string, teacherId: string) {
     setTestStatus(prev => ({ ...prev, [teacherId]: { ok: false, msg: 'Sending...' } }))
@@ -96,25 +121,49 @@ export default function TeachersPage() {
         <div className="space-y-3">
           {teachers.map(t => (
             <div key={t.id} className="bg-white rounded-xl shadow-sm p-4">
-              <p className="font-semibold text-gray-900">{t.name}</p>
-              <p className="text-sm text-gray-500">{t.phone}</p>
-              <div className="flex items-center justify-between mt-1">
-                <p className={`text-xs ${t.telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
-                  {t.telegram_chat_id ? 'Telegram connected' : 'Telegram not set up'}
-                </p>
-                {t.telegram_chat_id && (
-                  <button
-                    onClick={() => sendTest(t.telegram_chat_id, t.name, t.id)}
-                    className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100"
-                  >
-                    Send Test
-                  </button>
-                )}
-              </div>
-              {testStatus[t.id] && (
-                <p className={`text-xs mt-1 ${testStatus[t.id].ok ? 'text-green-600' : 'text-red-600'}`}>
-                  {testStatus[t.id].msg}
-                </p>
+              {editingId === t.id ? (
+                <form onSubmit={handleEdit} className="space-y-3">
+                  {editError && <p className="text-red-600 text-sm">{editError}</p>}
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Teacher name"
+                    value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} required />
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Phone number"
+                    value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} required />
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Telegram Chat ID"
+                    value={editForm.telegram_chat_id} onChange={e => setEditForm({ ...editForm, telegram_chat_id: e.target.value })} />
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={editLoading}
+                      className="flex-1 bg-purple-600 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                      {editLoading ? 'Saving...' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => setEditingId(null)}
+                      className="flex-1 border py-2 rounded-lg text-sm text-gray-600">Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between">
+                    <p className="font-semibold text-gray-900">{t.name}</p>
+                    <button onClick={() => startEdit(t)}
+                      className="text-xs text-gray-400 hover:text-purple-600 ml-2">Edit</button>
+                  </div>
+                  <p className="text-sm text-gray-500">{t.phone}</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className={`text-xs ${t.telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
+                      {t.telegram_chat_id ? 'Telegram connected' : 'Telegram not set up'}
+                    </p>
+                    {t.telegram_chat_id && (
+                      <button onClick={() => sendTest(t.telegram_chat_id, t.name, t.id)}
+                        className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100">
+                        Send Test
+                      </button>
+                    )}
+                  </div>
+                  {testStatus[t.id] && (
+                    <p className={`text-xs mt-1 ${testStatus[t.id].ok ? 'text-green-600' : 'text-red-600'}`}>
+                      {testStatus[t.id].msg}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           ))}

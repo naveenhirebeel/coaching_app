@@ -57,3 +57,22 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(student)
 }
+
+export async function PATCH(req: NextRequest) {
+  const user = getAuthUser(req)
+  if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id, name, parent_name, parent_telegram_chat_id, batch_id } = await req.json()
+  if (!id || !name || !batch_id) return NextResponse.json({ error: 'ID, name and batch are required' }, { status: 400 })
+
+  const { data, error } = await supabaseAdmin
+    .from('students')
+    .update({ name, parent_name, parent_telegram_chat_id, batch_id })
+    .eq('id', id)
+    .eq('institute_id', user.institute_id)
+    .select('*, batches(name, subject)')
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data)
+}

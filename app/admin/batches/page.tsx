@@ -13,6 +13,31 @@ export default function BatchesPage() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', subject: '', schedule: '', teacher_id: '' })
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError] = useState('')
+
+  function startEdit(b: Batch & { teacher_id?: string }) {
+    setEditingId(b.id)
+    setEditForm({ name: b.name, subject: b.subject, schedule: b.schedule || '', teacher_id: b.teacher_id || '' })
+    setEditError('')
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    setEditLoading(true); setEditError('')
+    const res = await fetch('/api/batches', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ id: editingId, ...editForm }),
+    })
+    const data = await res.json()
+    setEditLoading(false)
+    if (!res.ok) return setEditError(data.error)
+    setEditingId(null)
+    load()
+  }
 
   function getToken() { return localStorage.getItem('token') || '' }
 
@@ -111,10 +136,41 @@ export default function BatchesPage() {
         <div className="space-y-3">
           {batches.map(b => (
             <div key={b.id} className="bg-white rounded-xl shadow-sm p-4">
-              <p className="font-semibold text-gray-900">{b.name}</p>
-              <p className="text-sm text-gray-500">{b.subject}</p>
-              {b.schedule && <p className="text-xs text-gray-400 mt-1">{b.schedule}</p>}
-              {b.teachers?.name && <p className="text-xs text-blue-600 mt-1">Teacher: {b.teachers.name}</p>}
+              {editingId === b.id ? (
+                <form onSubmit={handleEdit} className="space-y-3">
+                  {editError && <p className="text-red-600 text-sm">{editError}</p>}
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Batch name"
+                    value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} required />
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Subject"
+                    value={editForm.subject} onChange={e => setEditForm({ ...editForm, subject: e.target.value })} required />
+                  <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Schedule"
+                    value={editForm.schedule} onChange={e => setEditForm({ ...editForm, schedule: e.target.value })} />
+                  <select className="w-full border rounded-lg px-3 py-2 text-sm"
+                    value={editForm.teacher_id} onChange={e => setEditForm({ ...editForm, teacher_id: e.target.value })}>
+                    <option value="">Select Teacher (optional)</option>
+                    {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={editLoading}
+                      className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                      {editLoading ? 'Saving...' : 'Save'}
+                    </button>
+                    <button type="button" onClick={() => setEditingId(null)}
+                      className="flex-1 border py-2 rounded-lg text-sm text-gray-600">Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="flex items-start justify-between">
+                    <p className="font-semibold text-gray-900">{b.name}</p>
+                    <button onClick={() => startEdit(b as Batch & { teacher_id?: string })}
+                      className="text-xs text-gray-400 hover:text-blue-600 ml-2">Edit</button>
+                  </div>
+                  <p className="text-sm text-gray-500">{b.subject}</p>
+                  {b.schedule && <p className="text-xs text-gray-400 mt-1">{b.schedule}</p>}
+                  {b.teachers?.name && <p className="text-xs text-blue-600 mt-1">Teacher: {b.teachers.name}</p>}
+                </>
+              )}
             </div>
           ))}
           {batches.length === 0 && (
