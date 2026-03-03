@@ -12,6 +12,18 @@ export default function TeachersPage() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({})
+
+  async function sendTest(chatId: string, name: string, teacherId: string) {
+    setTestStatus(prev => ({ ...prev, [teacherId]: { ok: false, msg: 'Sending...' } }))
+    const res = await fetch('/api/test-telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ chat_id: chatId, name }),
+    })
+    const data = await res.json()
+    setTestStatus(prev => ({ ...prev, [teacherId]: { ok: res.ok, msg: res.ok ? data.message : data.error } }))
+  }
 
   function getToken() { return localStorage.getItem('token') || '' }
 
@@ -86,9 +98,24 @@ export default function TeachersPage() {
             <div key={t.id} className="bg-white rounded-xl shadow-sm p-4">
               <p className="font-semibold text-gray-900">{t.name}</p>
               <p className="text-sm text-gray-500">{t.phone}</p>
-              <p className={`text-xs mt-1 ${t.telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
-                {t.telegram_chat_id ? 'Telegram connected' : 'Telegram not set up'}
-              </p>
+              <div className="flex items-center justify-between mt-1">
+                <p className={`text-xs ${t.telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
+                  {t.telegram_chat_id ? 'Telegram connected' : 'Telegram not set up'}
+                </p>
+                {t.telegram_chat_id && (
+                  <button
+                    onClick={() => sendTest(t.telegram_chat_id, t.name, t.id)}
+                    className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100"
+                  >
+                    Send Test
+                  </button>
+                )}
+              </div>
+              {testStatus[t.id] && (
+                <p className={`text-xs mt-1 ${testStatus[t.id].ok ? 'text-green-600' : 'text-red-600'}`}>
+                  {testStatus[t.id].msg}
+                </p>
+              )}
             </div>
           ))}
           {teachers.length === 0 && (

@@ -14,6 +14,18 @@ export default function StudentsPage() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({})
+
+  async function sendTest(chatId: string, name: string, studentId: string) {
+    setTestStatus(prev => ({ ...prev, [studentId]: { ok: false, msg: 'Sending...' } }))
+    const res = await fetch('/api/test-telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ chat_id: chatId, name }),
+    })
+    const data = await res.json()
+    setTestStatus(prev => ({ ...prev, [studentId]: { ok: res.ok, msg: res.ok ? data.message : data.error } }))
+  }
 
   function getToken() { return localStorage.getItem('token') || '' }
 
@@ -97,9 +109,24 @@ export default function StudentsPage() {
               <p className="font-semibold text-gray-900">{s.name}</p>
               {s.parent_name && <p className="text-sm text-gray-500">Parent: {s.parent_name}</p>}
               {s.batches?.name && <p className="text-xs text-blue-600 mt-1">Batch: {s.batches.name}</p>}
-              <p className={`text-xs mt-1 ${s.parent_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
-                {s.parent_telegram_chat_id ? 'Telegram alerts active' : 'No Telegram set up'}
-              </p>
+              <div className="flex items-center justify-between mt-1">
+                <p className={`text-xs ${s.parent_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
+                  {s.parent_telegram_chat_id ? 'Telegram alerts active' : 'No Telegram set up'}
+                </p>
+                {s.parent_telegram_chat_id && (
+                  <button
+                    onClick={() => sendTest(s.parent_telegram_chat_id, s.parent_name || s.name, s.id)}
+                    className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100"
+                  >
+                    Send Test
+                  </button>
+                )}
+              </div>
+              {testStatus[s.id] && (
+                <p className={`text-xs mt-1 ${testStatus[s.id].ok ? 'text-green-600' : 'text-red-600'}`}>
+                  {testStatus[s.id].msg}
+                </p>
+              )}
             </div>
           ))}
           {students.length === 0 && (
