@@ -1,13 +1,12 @@
 'use client'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function RegisterPage() {
-  const router = useRouter()
   const [form, setForm] = useState({ name: '', phone: '', email: '', password: '', address: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -21,16 +20,30 @@ export default function RegisterPage() {
     const data = await res.json()
     setLoading(false)
     if (!res.ok) return setError(data.error)
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('institute', JSON.stringify(data.institute))
-    router.push('/admin/dashboard')
+    setSubmitted(true)
+  }
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white rounded-xl shadow p-8 w-full max-w-md text-center space-y-4">
+          <div className="text-4xl">🎉</div>
+          <h1 className="text-xl font-bold text-gray-900">Registration Submitted!</h1>
+          <p className="text-gray-500 text-sm">
+            Your institute has been registered. Your account is currently under review.
+            You will be notified once it is approved and you can log in.
+          </p>
+          <Link href="/" className="inline-block mt-2 text-blue-600 text-sm hover:underline">← Back to home</Link>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="bg-white rounded-xl shadow p-8 w-full max-w-md">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Register Your Institute</h1>
-        <p className="text-gray-500 text-sm mb-6">Create your account to get started</p>
+        <p className="text-gray-500 text-sm mb-6">Create your account to get started. Accounts are reviewed before activation.</p>
 
         {error && <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg mb-4">{error}</div>}
 

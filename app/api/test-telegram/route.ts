@@ -11,8 +11,8 @@ export async function POST(req: NextRequest) {
   if (!chat_id || !name) return NextResponse.json({ error: 'Missing chat_id or name' }, { status: 400 })
 
   const message = `🔔 <b>Test message from CoachingBuddy!</b>\n\nHi <b>${name}</b>, your Telegram notifications are working correctly. ✅`
-  const ok = await sendTelegramMessage(chat_id, message)
+  const result = await sendTelegramMessage(chat_id, message)
 
-  if (!ok) return NextResponse.json({ error: 'Failed to send message. Check the Chat ID is correct.' }, { status: 400 })
+  if (!result.ok) return NextResponse.json({ error: result.error || 'Failed to send message.' }, { status: 400 })
   return NextResponse.json({ success: true, message: 'Test message sent successfully!' })
 }

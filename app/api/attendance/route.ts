@@ -66,8 +66,11 @@ export async function POST(req: NextRequest) {
 
   const batchName = batch?.name || 'Class'
   const institutePhone = (batch?.institutes as { phone?: string })?.phone || ''
-  const formattedDate = new Date(date).toLocaleDateString('en-IN', {
+  const now = new Date()
+  const formattedDate = now.toLocaleDateString('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long'
+  }) + ' at ' + now.toLocaleTimeString('en-IN', {
+    hour: '2-digit', minute: '2-digit', hour12: true
   })
 
   // Send Telegram notifications

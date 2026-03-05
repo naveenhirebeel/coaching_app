@@ -7,8 +7,17 @@ create table institutes (
   email text unique not null,
   password text not null,
   address text,
+  status text default 'pending' check (status in ('pending', 'approved', 'revoked', 'suspended', 'archived')),
+  status_reason text,
+  status_updated_at timestamptz,
   created_at timestamptz default now()
 );
+
+-- Run this in Supabase SQL Editor to add status to existing institutes table:
+-- alter table institutes add column if not exists status text default 'pending' check (status in ('pending', 'approved', 'revoked', 'suspended', 'archived'));
+-- alter table institutes add column if not exists status_reason text;
+-- alter table institutes add column if not exists status_updated_at timestamptz;
+-- update institutes set status = 'approved' where status is null;
 
 create table teachers (
   id uuid primary key default gen_random_uuid(),

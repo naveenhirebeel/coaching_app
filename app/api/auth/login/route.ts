@@ -22,6 +22,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
+    const statusMessages: Record<string, string> = {
+      pending: 'Your account is under review. You will be notified once approved.',
+      revoked: 'Your account access has been revoked. Please contact support.',
+      suspended: 'Your account has been suspended. Please contact support.',
+      archived: 'This account no longer exists.',
+    }
+    if (institute.status !== 'approved') {
+      return NextResponse.json({ error: statusMessages[institute.status] || 'Account not active.' }, { status: 403 })
+    }
+
     const token = signToken({ id: institute.id, role: 'admin', institute_id: institute.id })
 
     return NextResponse.json({

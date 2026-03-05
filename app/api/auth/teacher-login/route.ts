@@ -18,12 +18,17 @@ export async function POST(req: NextRequest) {
     if (!otp) {
       const { data: teacher } = await supabaseAdmin
         .from('teachers')
-        .select('*')
+        .select('*, institutes(status)')
         .eq('phone', phone)
         .single()
 
       if (!teacher) {
         return NextResponse.json({ error: 'Teacher not found' }, { status: 404 })
+      }
+
+      const instituteStatus = (teacher.institutes as { status: string } | null)?.status
+      if (instituteStatus !== 'approved') {
+        return NextResponse.json({ error: 'Your institute account is not active. Please contact your admin.' }, { status: 403 })
       }
 
       if (!teacher.telegram_chat_id) {

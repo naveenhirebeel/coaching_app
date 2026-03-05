@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { supabaseAdmin } from '@/lib/supabase'
-import { signToken } from '@/lib/auth'
+import { sendTelegramMessage } from '@/lib/telegram'
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,7 +11,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 })
     }
 
-    // Check if institute already exists with this email
     const { data: existing } = await supabaseAdmin
       .from('institutes')
       .select('id')
@@ -26,15 +25,22 @@ export async function POST(req: NextRequest) {
 
     const { data: institute, error } = await supabaseAdmin
       .from('institutes')
-      .insert({ name, phone, email, password: hashedPassword, address })
+      .insert({ name, phone, email, password: hashedPassword, address, status: 'pending' })
       .select()
       .single()
 
     if (error) throw error
 
-    const token = signToken({ id: institute.id, role: 'admin', institute_id: institute.id })
+    // Notify super admin on Telegram
+    const superAdminChatId = process.env.SUPER_ADMIN_TELEGRAM_CHAT_ID
+    if (superAdminChatId) {
+      await sendTelegramMessage(
+        superAdminChatId,
+        `🆕 <b>New Institute Registration</b>\n\n<b>${name}</b>\n📞 ${phone}\n📧 ${email}\n\nLogin to approve: /super-admin`
+      )
+    }
 
-    return NextResponse.json({ token, institute: { id: institute.id, name: institute.name } })
+    return NextResponse.json({ message: 'Registration successful. Your account is under review. You will be notified once approved.' })
   } catch (err) {
     console.error(err)
     return NextResponse.json({ error: 'Registration failed' }, { status: 500 })

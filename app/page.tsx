@@ -23,7 +23,7 @@ export default function Home() {
         <p className="text-sm text-gray-400 mt-4">
           New institute?{' '}
           <Link href="/admin/register" className="text-blue-600 hover:underline">
-            Register here
+            Apply for access
           </Link>
         </p>
       </div>

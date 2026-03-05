@@ -1,6 +1,6 @@
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN!
 
-export async function sendTelegramMessage(chatId: string, message: string) {
+export async function sendTelegramMessage(chatId: string, message: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`,
@@ -17,12 +17,12 @@ export async function sendTelegramMessage(chatId: string, message: string) {
     const data = await res.json()
     if (!data.ok) {
       console.error('Telegram error:', data.description)
-      return false
+      return { ok: false, error: data.description }
     }
-    return true
+    return { ok: true }
   } catch (err) {
     console.error('Telegram send failed:', err)
-    return false
+    return { ok: false, error: 'Network error reaching Telegram' }
   }
 }
 
