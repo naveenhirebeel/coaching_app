@@ -100,12 +100,8 @@ export default function TeachersPage() {
               value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
             <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Phone number"
               value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
-            <div>
-              <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Telegram Chat ID"
-                value={form.telegram_chat_id} onChange={e => setForm({ ...form, telegram_chat_id: e.target.value })} />
-              <p className="text-xs text-gray-400 mt-1">
-                Teacher must message your bot first. Their Chat ID appears in bot logs.
-              </p>
+            <div className="bg-blue-50 rounded-lg px-3 py-2 text-xs text-blue-700">
+              💡 No Chat ID needed. After saving, ask the teacher to open your Telegram bot and send their phone number (e.g. <span className="font-mono">9876543210</span>). They will be linked automatically.
             </div>
             <div className="flex gap-2">
               <button type="submit" disabled={loading}
@@ -149,7 +145,7 @@ export default function TeachersPage() {
                   <p className="text-sm text-gray-500">{t.phone}</p>
                   <div className="flex items-center justify-between mt-1">
                     <p className={`text-xs ${t.telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
-                      {t.telegram_chat_id ? 'Telegram connected' : 'Telegram not set up'}
+                      {t.telegram_chat_id ? 'Telegram connected' : 'Telegram not linked'}
                     </p>
                     {t.telegram_chat_id && (
                       <button onClick={() => sendTest(t.telegram_chat_id, t.name, t.id)}
@@ -158,6 +154,11 @@ export default function TeachersPage() {
                       </button>
                     )}
                   </div>
+                  {!t.telegram_chat_id && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Ask teacher to open your bot and send: <span className="font-mono text-gray-600">{t.phone}</span>
+                    </p>
+                  )}
                   {testStatus[t.id] && (
                     <p className={`text-xs mt-1 ${testStatus[t.id].ok ? 'text-green-600' : 'text-red-600'}`}>
                       {testStatus[t.id].msg}

@@ -19,6 +19,20 @@ export default function StudentsPage() {
   const [editForm, setEditForm] = useState({ name: '', parent_name: '', parent_telegram_chat_id: '', batch_id: '' })
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  function getParentLink(studentId: string) {
+    const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
+    const base = typeof window !== 'undefined' ? window.location.origin : ''
+    if (botUsername) return `https://t.me/${botUsername}?start=p_${studentId}`
+    return `${base}/api/telegram-webhook?ref=p_${studentId}` // fallback
+  }
+
+  async function copyParentLink(studentId: string) {
+    await navigator.clipboard.writeText(getParentLink(studentId))
+    setCopiedId(studentId)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
 
   function startEdit(s: Student) {
     setEditingId(s.id)
@@ -165,15 +179,23 @@ export default function StudentsPage() {
                   {s.batches?.name && <p className="text-xs text-blue-600 mt-1">Batch: {s.batches.name}</p>}
                   <div className="flex items-center justify-between mt-1">
                     <p className={`text-xs ${s.parent_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
-                      {s.parent_telegram_chat_id ? 'Telegram alerts active' : 'No Telegram set up'}
+                      {s.parent_telegram_chat_id ? 'Telegram alerts active' : 'Parent not linked'}
                     </p>
-                    {s.parent_telegram_chat_id && (
+                    {s.parent_telegram_chat_id ? (
                       <button onClick={() => sendTest(s.parent_telegram_chat_id, s.parent_name || s.name, s.id)}
                         className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100">
                         Send Test
                       </button>
+                    ) : (
+                      <button onClick={() => copyParentLink(s.id)}
+                        className="text-xs bg-orange-50 text-orange-600 px-3 py-1 rounded-lg hover:bg-orange-100">
+                        {copiedId === s.id ? 'Copied!' : 'Copy Link'}
+                      </button>
                     )}
                   </div>
+                  {!s.parent_telegram_chat_id && (
+                    <p className="text-xs text-gray-400 mt-1">Share the copied link with the parent. They open it in Telegram to link automatically.</p>
+                  )}
                   {testStatus[s.id] && (
                     <p className={`text-xs mt-1 ${testStatus[s.id].ok ? 'text-green-600' : 'text-red-600'}`}>
                       {testStatus[s.id].msg}
