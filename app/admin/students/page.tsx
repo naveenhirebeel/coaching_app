@@ -20,6 +20,20 @@ export default function StudentsPage() {
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  async function handleDelete(id: string) {
+    setDeleteLoading(true)
+    await fetch('/api/students', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ id }),
+    })
+    setDeleteLoading(false)
+    setDeletingId(null)
+    load()
+  }
 
   function getParentLink(studentId: string) {
     const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
@@ -172,8 +186,12 @@ export default function StudentsPage() {
                 <>
                   <div className="flex items-start justify-between">
                     <p className="font-semibold text-gray-900">{s.name}</p>
-                    <button onClick={() => startEdit(s)}
-                      className="text-xs text-gray-400 hover:text-green-600 ml-2">Edit</button>
+                    <div className="flex gap-2 ml-2">
+                      <button onClick={() => startEdit(s)}
+                        className="text-xs text-gray-400 hover:text-green-600">Edit</button>
+                      <button onClick={() => setDeletingId(s.id)}
+                        className="text-xs text-gray-400 hover:text-red-600">Delete</button>
+                    </div>
                   </div>
                   {s.parent_name && <p className="text-sm text-gray-500">Parent: {s.parent_name}</p>}
                   {s.batches?.name && <p className="text-xs text-blue-600 mt-1">Batch: {s.batches.name}</p>}
@@ -200,6 +218,19 @@ export default function StudentsPage() {
                     <p className={`text-xs mt-1 ${testStatus[s.id].ok ? 'text-green-600' : 'text-red-600'}`}>
                       {testStatus[s.id].msg}
                     </p>
+                  )}
+                  {deletingId === s.id && (
+                    <div className="mt-3 bg-red-50 rounded-lg p-3 space-y-2">
+                      <p className="text-xs text-red-700 font-medium">Remove this student? All attendance records will also be deleted. Parent will be notified via Telegram if linked.</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleDelete(s.id)} disabled={deleteLoading}
+                          className="flex-1 bg-red-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
+                          {deleteLoading ? 'Removing...' : 'Confirm Remove'}
+                        </button>
+                        <button onClick={() => setDeletingId(null)}
+                          className="flex-1 border py-1.5 rounded-lg text-xs text-gray-600">Cancel</button>
+                      </div>
+                    </div>
                   )}
                 </>
               )}

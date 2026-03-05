@@ -17,6 +17,20 @@ export default function TeachersPage() {
   const [editForm, setEditForm] = useState({ name: '', phone: '', telegram_chat_id: '' })
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  async function handleDelete(id: string) {
+    setDeleteLoading(true)
+    await fetch('/api/teachers', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ id }),
+    })
+    setDeleteLoading(false)
+    setDeletingId(null)
+    load()
+  }
 
   function startEdit(t: Teacher) {
     setEditingId(t.id)
@@ -139,8 +153,12 @@ export default function TeachersPage() {
                 <>
                   <div className="flex items-start justify-between">
                     <p className="font-semibold text-gray-900">{t.name}</p>
-                    <button onClick={() => startEdit(t)}
-                      className="text-xs text-gray-400 hover:text-purple-600 ml-2">Edit</button>
+                    <div className="flex gap-2 ml-2">
+                      <button onClick={() => startEdit(t)}
+                        className="text-xs text-gray-400 hover:text-purple-600">Edit</button>
+                      <button onClick={() => setDeletingId(t.id)}
+                        className="text-xs text-gray-400 hover:text-red-600">Delete</button>
+                    </div>
                   </div>
                   <p className="text-sm text-gray-500">{t.phone}</p>
                   <div className="flex items-center justify-between mt-1">
@@ -163,6 +181,19 @@ export default function TeachersPage() {
                     <p className={`text-xs mt-1 ${testStatus[t.id].ok ? 'text-green-600' : 'text-red-600'}`}>
                       {testStatus[t.id].msg}
                     </p>
+                  )}
+                  {deletingId === t.id && (
+                    <div className="mt-3 bg-red-50 rounded-lg p-3 space-y-2">
+                      <p className="text-xs text-red-700 font-medium">Remove this teacher? Their batches will remain but teacher assignment will be cleared. A Telegram notification will be sent if linked.</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleDelete(t.id)} disabled={deleteLoading}
+                          className="flex-1 bg-red-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50">
+                          {deleteLoading ? 'Removing...' : 'Confirm Remove'}
+                        </button>
+                        <button onClick={() => setDeletingId(null)}
+                          className="flex-1 border py-1.5 rounded-lg text-xs text-gray-600">Cancel</button>
+                      </div>
+                    </div>
                   )}
                 </>
               )}
