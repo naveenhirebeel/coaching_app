@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   // --- Handle /start with deep link parameter (parent linking) ---
   if (text.startsWith('/start')) {
-    const param = text.split(' ')[1] || ''
+    const param = text.split(/[ =]/)[1] || ''
 
     if (param.startsWith('p_')) {
       const studentId = param.slice(2)
