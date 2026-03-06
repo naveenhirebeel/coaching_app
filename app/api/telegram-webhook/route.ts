@@ -22,8 +22,10 @@ export async function POST(req: NextRequest) {
   }
 
   const message = update.message
-  console.log('[webhook] received update', JSON.stringify(update).slice(0, 200))
+  console.log('[webhook] received update', JSON.stringify(update).slice(0, 500))
+  console.log('[webhook] message text:', message?.text, 'chat id:', message?.chat?.id)
   if (!message?.text || !message.chat?.id) {
+    console.log('[webhook] early exit - no text or chat id')
     return NextResponse.json({ ok: true })
   }
 
