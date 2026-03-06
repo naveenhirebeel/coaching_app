@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import PageHeader from '@/components/PageHeader'
 
 export default function AdminDashboard() {
   const router = useRouter()
@@ -29,13 +30,11 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm px-4 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="font-bold text-gray-900 text-lg">CoachingBuddy</h1>
-          <p className="text-sm text-gray-500">{institute?.name}</p>
-        </div>
-        <button onClick={logout} className="text-sm text-red-600 hover:underline">Logout</button>
-      </header>
+      <PageHeader
+        title="CoachingBuddy"
+        subtitle={institute?.name}
+        right={<button onClick={logout} className="text-sm text-red-600 hover:underline">Logout</button>}
+      />
 
       <main className="p-4 max-w-2xl mx-auto">
         <h2 className="text-xl font-semibold text-gray-800 mt-4 mb-6">Admin Dashboard</h2>

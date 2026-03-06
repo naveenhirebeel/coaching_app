@@ -2,6 +2,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import PageHeader from '@/components/PageHeader'
 
 type Student = { id: string; name: string; parent_name: string }
 type Record = { student_id: string; status: 'present' | 'absent' }
@@ -80,15 +81,12 @@ function AttendanceContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm px-4 py-4 flex items-center gap-3">
-        <Link href="/teacher/dashboard" className="text-gray-500 hover:text-gray-900">← Back</Link>
-        <div>
-          <h1 className="font-bold text-gray-900">{batchName}</h1>
-          <p className="text-xs text-gray-500">
-            {presentCount} present · {absentCount} absent
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        title={batchName}
+        subtitle={`${presentCount} present · ${absentCount} absent`}
+        backHref="/teacher/dashboard"
+        homeHref="/teacher/dashboard"
+      />
 
       <main className="p-4 max-w-xl mx-auto pb-32">
         <p className="text-xs text-gray-400 mb-3">

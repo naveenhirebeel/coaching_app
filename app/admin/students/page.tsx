@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import PageHeader from '@/components/PageHeader'
 
 type Student = { id: string; name: string; parent_name: string; parent_telegram_chat_id: string; batch_id: string; batches?: { name: string } }
 type Batch = { id: string; name: string; subject: string }
@@ -112,10 +113,7 @@ export default function StudentsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm px-4 py-4 flex items-center gap-3">
-        <Link href="/admin/dashboard" className="text-gray-500 hover:text-gray-900">← Back</Link>
-        <h1 className="font-bold text-gray-900">Students</h1>
-      </header>
+      <PageHeader title="Students" backHref="/admin/dashboard" homeHref="/admin/dashboard" />
 
       <main className="p-4 max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-4">

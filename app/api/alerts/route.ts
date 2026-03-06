@@ -7,8 +7,7 @@ export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { batch_id, message } = await req.json()
-  // batch_id = null means send to ALL batches
+  const { batch_id, student_id, message } = await req.json()
 
   if (!message) {
     return NextResponse.json({ error: 'Message is required' }, { status: 400 })
@@ -23,7 +22,29 @@ export async function POST(req: NextRequest) {
 
   const instituteName = institute?.name || 'Institute'
 
-  // Get students to notify
+  // Student-wise alert
+  if (student_id) {
+    const { data: student } = await supabaseAdmin
+      .from('students')
+      .select('name, parent_telegram_chat_id, batches(name)')
+      .eq('id', student_id)
+      .eq('institute_id', user.institute_id)
+      .single()
+
+    if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 })
+    if (!student.parent_telegram_chat_id) {
+      return NextResponse.json({ error: 'Parent Telegram not linked for this student' }, { status: 400 })
+    }
+
+    const batchName = (student.batches as { name?: string })?.name || 'Class'
+    await sendTelegramMessage(
+      student.parent_telegram_chat_id,
+      holidayMessage(batchName, message, instituteName)
+    )
+    return NextResponse.json({ success: true, message: `Alert sent to ${student.name}'s parent.` })
+  }
+
+  // Batch-wise alert (batch_id = null means all batches)
   let studentsQuery = supabaseAdmin
     .from('students')
     .select('name, parent_telegram_chat_id, batches(name)')

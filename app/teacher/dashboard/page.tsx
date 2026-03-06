@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import PageHeader from '@/components/PageHeader'
 
 type Batch = { id: string; name: string; subject: string; schedule: string }
 
@@ -32,13 +33,11 @@ export default function TeacherDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm px-4 py-4 flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">Good morning</p>
-          <h1 className="font-bold text-gray-900">{teacher?.name || 'Teacher'}</h1>
-        </div>
-        <button onClick={logout} className="text-sm text-red-600 hover:underline">Logout</button>
-      </header>
+      <PageHeader
+        title={teacher?.name || 'Teacher'}
+        subtitle="Good morning"
+        right={<button onClick={logout} className="text-sm text-red-600 hover:underline">Logout</button>}
+      />
 
       <main className="p-4 max-w-xl mx-auto">
         <p className="text-sm text-gray-500 mb-4">{today}</p>
