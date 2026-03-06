@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
   }
 
   const message = update.message
+  console.log('[webhook] received update', JSON.stringify(update).slice(0, 200))
   if (!message?.text || !message.chat?.id) {
     return NextResponse.json({ ok: true })
   }
@@ -42,14 +43,23 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (student) {
-        await supabaseAdmin
+        const { error: updateError } = await supabaseAdmin
           .from('students')
           .update({ parent_telegram_chat_id: chatId })
           .eq('id', studentId)
 
+        console.log('[webhook] parent link update', { studentId, chatId, updateError })
+
         await sendTelegramMessage(
           chatId,
           `✅ <b>Linked successfully!</b>\n\nYou will now receive attendance alerts for <b>${student.name}</b> on this chat.`
+        )
+        return NextResponse.json({ ok: true })
+      } else {
+        console.log('[webhook] student not found', { studentId })
+        await sendTelegramMessage(
+          chatId,
+          `❌ <b>Link expired or invalid.</b>\n\nPlease ask the institute for a fresh link.`
         )
         return NextResponse.json({ ok: true })
       }
