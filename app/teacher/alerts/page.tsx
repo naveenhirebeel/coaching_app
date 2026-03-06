@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
 
 type Batch = { id: string; name: string; subject: string }
@@ -15,12 +15,13 @@ const TEMPLATES = [
 
 type Mode = 'batch' | 'student'
 
-export default function AlertsPage() {
+function AlertsContent() {
   const router = useRouter()
+  const params = useSearchParams()
   const [mode, setMode] = useState<Mode>('batch')
   const [batches, setBatches] = useState<Batch[]>([])
   const [students, setStudents] = useState<Student[]>([])
-  const [batchId, setBatchId] = useState('')
+  const [batchId, setBatchId] = useState(params.get('batch_id') || '')
   const [studentId, setStudentId] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -159,5 +160,13 @@ export default function AlertsPage() {
         </button>
       </main>
     </div>
+  )
+}
+
+export default function AlertsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <AlertsContent />
+    </Suspense>
   )
 }

@@ -23,7 +23,6 @@ export default function TeacherDashboard() {
     if (t) setTeacher(JSON.parse(t))
 
     const todayDate = new Date().toISOString().split('T')[0]
-
     Promise.all([
       fetch('/api/batches', { headers: { Authorization: `Bearer ${token}` } }),
       fetch(`/api/attendance?date=${todayDate}`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -40,13 +39,18 @@ export default function TeacherDashboard() {
     router.push('/')
   }
 
-  function getBatchState(batchId: string): 'none' | 'pending-exit' | 'done' {
-    const batchRows = todayAttendance.filter(r => r.batch_id === batchId)
-    if (batchRows.length === 0) return 'none'
-    const attended = batchRows.filter(r => r.status === 'present' || r.status === 'late')
-    if (attended.length === 0) return 'done' // all absent, nothing to exit
-    const pendingExits = attended.filter(r => !r.exit_time)
-    return pendingExits.length > 0 ? 'pending-exit' : 'done'
+  function getBatchStatus(batchId: string): string {
+    const rows = todayAttendance.filter(r => r.batch_id === batchId)
+    if (rows.length === 0) return 'Attendance pending'
+    const attended = rows.filter(r => r.status === 'present' || r.status === 'late')
+    if (attended.length === 0) return `All absent (${rows.length})`
+    const inClass = attended.filter(r => !r.exit_time).length
+    if (inClass === 0) return `All exited · ${attended.length} attended`
+    return `${inClass} still in class · ${attended.filter(r => r.exit_time).length} exited`
+  }
+
+  function isAttendanceDone(batchId: string) {
+    return todayAttendance.some(r => r.batch_id === batchId)
   }
 
   return (
@@ -70,37 +74,41 @@ export default function TeacherDashboard() {
 
         <div className="space-y-3">
           {batches.map(b => {
-            const state = getBatchState(b.id)
+            const status = getBatchStatus(b.id)
+            const attendanceDone = isAttendanceDone(b.id)
             return (
-              <div key={b.id} className="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-gray-900">{b.name}</p>
-                  <p className="text-sm text-gray-500">{b.subject}</p>
-                  {b.schedule && <p className="text-xs text-gray-400 mt-0.5">{b.schedule}</p>}
+              <div key={b.id} className="bg-white rounded-xl shadow-sm p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <p className="font-semibold text-gray-900">{b.name}</p>
+                    <p className="text-sm text-gray-500">{b.subject}</p>
+                    {b.schedule && <p className="text-xs text-gray-400 mt-0.5">{b.schedule}</p>}
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ml-2 shrink-0 ${
+                    attendanceDone ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {attendanceDone ? '✓' : '○'} {status}
+                  </span>
                 </div>
-                <div className="flex flex-col gap-1.5 ml-3 items-end">
-                  {state === 'none' && (
-                    <Link
-                      href={`/teacher/attendance?batch_id=${b.id}&batch_name=${encodeURIComponent(b.name)}`}
-                      className="bg-green-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-700 whitespace-nowrap"
-                    >
-                      Mark
-                    </Link>
-                  )}
-                  {state === 'pending-exit' && (
-                    <>
-                      <span className="text-xs text-green-600 font-medium">✓ Attendance done</span>
-                      <Link
-                        href={`/teacher/exit?batch_id=${b.id}&batch_name=${encodeURIComponent(b.name)}`}
-                        className="bg-orange-500 text-white text-sm px-3 py-1.5 rounded-lg hover:bg-orange-600 whitespace-nowrap"
-                      >
-                        Mark Exit
-                      </Link>
-                    </>
-                  )}
-                  {state === 'done' && (
-                    <span className="text-xs text-gray-400 bg-gray-100 px-3 py-1.5 rounded-lg">✓ Done</span>
-                  )}
+                <div className="flex gap-2 mt-3">
+                  <Link
+                    href={`/teacher/attendance?batch_id=${b.id}&batch_name=${encodeURIComponent(b.name)}`}
+                    className="flex-1 text-center bg-green-600 text-white text-sm py-2 rounded-lg hover:bg-green-700"
+                  >
+                    Attendance
+                  </Link>
+                  <Link
+                    href={`/teacher/exit?batch_id=${b.id}&batch_name=${encodeURIComponent(b.name)}`}
+                    className="flex-1 text-center bg-orange-500 text-white text-sm py-2 rounded-lg hover:bg-orange-600"
+                  >
+                    Mark Exit
+                  </Link>
+                  <Link
+                    href={`/teacher/alerts?batch_id=${b.id}`}
+                    className="flex-1 text-center bg-blue-500 text-white text-sm py-2 rounded-lg hover:bg-blue-600"
+                  >
+                    Alert
+                  </Link>
                 </div>
               </div>
             )
