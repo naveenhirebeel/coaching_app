@@ -50,6 +50,23 @@ export function holidayMessage(batchName: string, message: string, instituteName
 ${message}`
 }
 
+export function lateMessage(studentName: string, batchName: string, date: string, institutePhone: string) {
+  return `⏰ <b>Late Arrival Notice</b>
+
+<b>${studentName}</b> arrived <b>LATE</b> to class today.
+📚 Batch: ${batchName}
+📅 Date: ${date}
+📞 Contact: ${institutePhone}`
+}
+
+export function exitMessage(studentName: string, batchName: string, exitTime: string) {
+  return `🏠 <b>Left Class</b>
+
+<b>${studentName}</b> has left class.
+📚 Batch: ${batchName}
+🕐 Left at: ${exitTime}`
+}
+
 export function welcomeMessage(studentName: string, batchName: string, instituteName: string) {
   return `👋 <b>Welcome to ${instituteName}!</b>
 

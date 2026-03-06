@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser } from '@/lib/auth'
-import { sendTelegramMessage, absentMessage, presentMessage } from '@/lib/telegram'
+import { sendTelegramMessage, absentMessage, presentMessage, lateMessage, exitMessage } from '@/lib/telegram'
 
 export async function GET(req: NextRequest) {
   const user = getAuthUser(req)
@@ -11,12 +11,15 @@ export async function GET(req: NextRequest) {
   const batchId = searchParams.get('batch_id')
   const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
 
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from('attendance')
     .select('*, students(name)')
-    .eq('batch_id', batchId)
+    .eq('institute_id', user.institute_id)
     .eq('date', date)
 
+  if (batchId) query = query.eq('batch_id', batchId)
+
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
@@ -26,13 +29,11 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { batch_id, date, records, notify_present } = await req.json()
-  // records = [{ student_id, status: 'present' | 'absent' }]
 
   if (!batch_id || !date || !records?.length) {
     return NextResponse.json({ error: 'batch_id, date and records are required' }, { status: 400 })
   }
 
-  // Check if attendance already submitted for this batch+date
   const { data: existing } = await supabaseAdmin
     .from('attendance')
     .select('id')
@@ -44,7 +45,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Attendance already submitted for this batch today' }, { status: 400 })
   }
 
-  // Save all attendance records
   const { error: insertError } = await supabaseAdmin.from('attendance').insert(
     records.map((r: { student_id: string; status: string }) => ({
       student_id: r.student_id,
@@ -57,7 +57,6 @@ export async function POST(req: NextRequest) {
 
   if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
 
-  // Fetch batch + institute info for messages
   const { data: batch } = await supabaseAdmin
     .from('batches')
     .select('name, institutes(name, phone)')
@@ -73,7 +72,6 @@ export async function POST(req: NextRequest) {
     hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata'
   })
 
-  // Send Telegram notifications
   let notifiedCount = 0
   for (const record of records) {
     const { data: student } = await supabaseAdmin
@@ -85,23 +83,60 @@ export async function POST(req: NextRequest) {
     if (!student?.parent_telegram_chat_id) continue
 
     if (record.status === 'absent') {
-      await sendTelegramMessage(
-        student.parent_telegram_chat_id,
-        absentMessage(student.name, batchName, formattedDate, institutePhone)
-      )
+      await sendTelegramMessage(student.parent_telegram_chat_id, absentMessage(student.name, batchName, formattedDate, institutePhone))
+      notifiedCount++
+    } else if (record.status === 'late') {
+      await sendTelegramMessage(student.parent_telegram_chat_id, lateMessage(student.name, batchName, formattedDate, institutePhone))
       notifiedCount++
     } else if (record.status === 'present' && notify_present) {
-      await sendTelegramMessage(
-        student.parent_telegram_chat_id,
-        presentMessage(student.name, batchName, formattedDate)
-      )
+      await sendTelegramMessage(student.parent_telegram_chat_id, presentMessage(student.name, batchName, formattedDate))
       notifiedCount++
     }
   }
 
   const absentCount = records.filter((r: { status: string }) => r.status === 'absent').length
+  const lateCount = records.filter((r: { status: string }) => r.status === 'late').length
   return NextResponse.json({
     success: true,
-    message: `Attendance saved. ${absentCount} absent. ${notifiedCount} parents notified.`,
+    message: `Attendance saved. ${absentCount} absent, ${lateCount} late. ${notifiedCount} parents notified.`,
   })
+}
+
+export async function PATCH(req: NextRequest) {
+  const user = getAuthUser(req)
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { attendance_id } = await req.json()
+  if (!attendance_id) return NextResponse.json({ error: 'attendance_id required' }, { status: 400 })
+
+  const { data: record, error: fetchError } = await supabaseAdmin
+    .from('attendance')
+    .select('id, exit_time, students(name, parent_telegram_chat_id), batches(name)')
+    .eq('id', attendance_id)
+    .eq('institute_id', user.institute_id)
+    .single()
+
+  if (fetchError || !record) return NextResponse.json({ error: 'Record not found' }, { status: 404 })
+  if (record.exit_time) return NextResponse.json({ error: 'Exit already marked' }, { status: 400 })
+
+  const exitTime = new Date()
+  const formattedTime = exitTime.toLocaleTimeString('en-IN', {
+    hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata'
+  })
+
+  const { error: updateError } = await supabaseAdmin
+    .from('attendance')
+    .update({ exit_time: exitTime.toISOString() })
+    .eq('id', attendance_id)
+
+  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+
+  const student = record.students as unknown as { name: string; parent_telegram_chat_id: string } | null
+  const batchName = (record.batches as { name?: string })?.name || 'Class'
+
+  if (student?.parent_telegram_chat_id) {
+    await sendTelegramMessage(student.parent_telegram_chat_id, exitMessage(student.name, batchName, formattedTime))
+  }
+
+  return NextResponse.json({ success: true, exit_time: formattedTime })
 }
