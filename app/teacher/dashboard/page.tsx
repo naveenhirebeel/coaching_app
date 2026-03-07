@@ -95,19 +95,13 @@ export default function TeacherDashboard() {
                     href={`/teacher/attendance?batch_id=${b.id}&batch_name=${encodeURIComponent(b.name)}`}
                     className="flex-1 text-center bg-green-600 text-white text-sm py-2 rounded-lg hover:bg-green-700"
                   >
-                    Attendance
-                  </Link>
-                  <Link
-                    href={`/teacher/exit?batch_id=${b.id}&batch_name=${encodeURIComponent(b.name)}`}
-                    className="flex-1 text-center bg-orange-500 text-white text-sm py-2 rounded-lg hover:bg-orange-600"
-                  >
-                    Mark Exit
+                    Mark
                   </Link>
                   <Link
                     href={`/teacher/alerts?batch_id=${b.id}`}
-                    className="flex-1 text-center bg-blue-500 text-white text-sm py-2 rounded-lg hover:bg-blue-600"
+                    className="flex-1 text-center bg-orange-500 text-white text-sm py-2 rounded-lg hover:bg-orange-600"
                   >
-                    Alert
+                    Send Alerts
                   </Link>
                 </div>
               </div>

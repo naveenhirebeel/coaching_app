@@ -7,6 +7,8 @@ type Student = { id: string; name: string; parent_name: string }
 type MarkedStatus = 'present' | 'late' | 'absent'
 type MarkedMap = Record<string, MarkedStatus>   // student_id → status
 type SendingMap = Record<string, MarkedStatus>  // student_id → which button is loading
+type AttendanceIdMap = Record<string, string>   // student_id → attendance record id
+type ExitMap = Record<string, string>           // student_id → exit time string
 
 function AttendanceContent() {
   const router = useRouter()
@@ -17,6 +19,9 @@ function AttendanceContent() {
   const [students, setStudents] = useState<Student[]>([])
   const [marked, setMarked] = useState<MarkedMap>({})
   const [sending, setSending] = useState<SendingMap>({})
+  const [attendanceIds, setAttendanceIds] = useState<AttendanceIdMap>({})
+  const [exits, setExits] = useState<ExitMap>({})
+  const [exitSending, setExitSending] = useState<Record<string, boolean>>({})
   const [notifyPresent, setNotifyPresent] = useState(false)
 
   function getToken() { return localStorage.getItem('token') || '' }
@@ -35,10 +40,21 @@ function AttendanceContent() {
       setStudents(studentData)
 
       if (aRes.ok) {
-        const existing: { student_id: string; status: MarkedStatus }[] = await aRes.json()
+        const existing: { id: string; student_id: string; status: MarkedStatus; exit_time: string | null }[] = await aRes.json()
         const map: MarkedMap = {}
-        existing.forEach(r => { map[r.student_id] = r.status })
+        const idMap: AttendanceIdMap = {}
+        const exitMap: ExitMap = {}
+        existing.forEach(r => {
+          map[r.student_id] = r.status
+          idMap[r.student_id] = r.id
+          if (r.exit_time) {
+            const t = new Date(r.exit_time)
+            exitMap[r.student_id] = t.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+          }
+        })
         setMarked(map)
+        setAttendanceIds(idMap)
+        setExits(exitMap)
       }
     })
   }, [batchId, router])
@@ -47,7 +63,7 @@ function AttendanceContent() {
     setSending(prev => ({ ...prev, [studentId]: status }))
     const today = new Date().toISOString().split('T')[0]
 
-    await fetch('/api/attendance', {
+    const res = await fetch('/api/attendance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
       body: JSON.stringify({
@@ -58,6 +74,10 @@ function AttendanceContent() {
         notify_present: notifyPresent,
       }),
     })
+    const data = await res.json()
+    if (data.attendance_id) {
+      setAttendanceIds(prev => ({ ...prev, [studentId]: data.attendance_id }))
+    }
 
     setMarked(prev => ({ ...prev, [studentId]: status }))
     setSending(prev => {
@@ -65,6 +85,24 @@ function AttendanceContent() {
       delete next[studentId]
       return next
     })
+  }
+
+  async function markExit(studentId: string) {
+    const attendanceId = attendanceIds[studentId]
+    if (!attendanceId) return
+    setExitSending(prev => ({ ...prev, [studentId]: true }))
+
+    const res = await fetch('/api/attendance', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ attendance_id: attendanceId }),
+    })
+    const data = await res.json()
+
+    if (res.ok && data.exit_time) {
+      setExits(prev => ({ ...prev, [studentId]: data.exit_time }))
+    }
+    setExitSending(prev => { const next = { ...prev }; delete next[studentId]; return next })
   }
 
   const markedCount = Object.keys(marked).length
@@ -107,6 +145,9 @@ function AttendanceContent() {
         {students.map(s => {
           const currentStatus = marked[s.id]
           const isSending = sending[s.id]
+          const exitTime = exits[s.id]
+          const isExiting = exitSending[s.id]
+          const canExit = (currentStatus === 'present' || currentStatus === 'late') && attendanceIds[s.id]
 
           return (
             <div key={s.id} className={`bg-white rounded-xl shadow-sm p-4 border-2 transition ${
@@ -120,15 +161,20 @@ function AttendanceContent() {
                   <p className="font-semibold text-gray-900">{s.name}</p>
                   {s.parent_name && <p className="text-xs text-gray-400">{s.parent_name}</p>}
                 </div>
-                {currentStatus && (
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                    currentStatus === 'present' ? 'bg-green-100 text-green-700' :
-                    currentStatus === 'late'    ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    {currentStatus.toUpperCase()}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {exitTime && (
+                    <span className="text-xs text-gray-400">Exited {exitTime}</span>
+                  )}
+                  {currentStatus && (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      currentStatus === 'present' ? 'bg-green-100 text-green-700' :
+                      currentStatus === 'late'    ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {currentStatus.toUpperCase()}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex gap-2">
                 {(['present', 'late', 'absent'] as MarkedStatus[]).map(status => {
@@ -149,6 +195,21 @@ function AttendanceContent() {
                   )
                 })}
               </div>
+              {canExit && (
+                <div className="mt-2">
+                  {exitTime ? (
+                    <p className="text-center text-xs text-gray-400 py-1">Exit sent at {exitTime}</p>
+                  ) : (
+                    <button
+                      onClick={() => markExit(s.id)}
+                      disabled={isExiting}
+                      className="w-full text-sm py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition"
+                    >
+                      {isExiting ? 'Sending...' : 'Send Exit Alert'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}

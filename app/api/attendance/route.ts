@@ -36,12 +36,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Upsert — insert or update on re-mark
-  const { error: upsertError } = await supabaseAdmin
+  const { data: upserted, error: upsertError } = await supabaseAdmin
     .from('attendance')
     .upsert(
       { student_id, batch_id, date, status, institute_id: user.institute_id },
       { onConflict: 'student_id,date,batch_id' }
     )
+    .select('id')
+    .single()
 
   if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 })
 
@@ -74,7 +76,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true, notified })
+  return NextResponse.json({ success: true, notified, attendance_id: upserted?.id })
 }
 
 export async function PATCH(req: NextRequest) {
