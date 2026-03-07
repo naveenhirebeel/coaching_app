@@ -100,7 +100,10 @@ function AttendanceContent() {
     const data = await res.json()
 
     if (res.ok && data.exit_time) {
-      setExits(prev => ({ ...prev, [studentId]: data.exit_time }))
+      // Reset card to original state after exit
+      setMarked(prev => { const next = { ...prev }; delete next[studentId]; return next })
+      setAttendanceIds(prev => { const next = { ...prev }; delete next[studentId]; return next })
+      setExits(prev => { const next = { ...prev }; delete next[studentId]; return next })
     }
     setExitSending(prev => { const next = { ...prev }; delete next[studentId]; return next })
   }
