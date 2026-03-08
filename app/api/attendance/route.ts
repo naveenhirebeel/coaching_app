@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     .select('*, students(name)')
     .eq('institute_id', user.institute_id)
     .eq('date', date)
+    .order('created_at', { ascending: true })
 
   if (batchId) query = query.eq('batch_id', batchId)
 
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data)
 }
 
-// Mark a single student immediately (upsert — allows re-marking)
+// Mark a single student — always inserts a new row for full audit log
 export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -35,17 +36,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'student_id, batch_id, date and status are required' }, { status: 400 })
   }
 
-  // Upsert — insert or update on re-mark
-  const { data: upserted, error: upsertError } = await supabaseAdmin
+  const { data: inserted, error: insertError } = await supabaseAdmin
     .from('attendance')
-    .upsert(
-      { student_id, batch_id, date, status, institute_id: user.institute_id },
-      { onConflict: 'student_id,date,batch_id' }
-    )
+    .insert({ student_id, batch_id, date, status, institute_id: user.institute_id })
     .select('id')
     .single()
 
-  if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 })
+  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
 
   // Fetch batch + student for Telegram
   const [{ data: batch }, { data: student }] = await Promise.all([
@@ -76,7 +73,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true, notified, attendance_id: upserted?.id })
+  return NextResponse.json({ success: true, notified, attendance_id: inserted?.id })
 }
 
 export async function PATCH(req: NextRequest) {

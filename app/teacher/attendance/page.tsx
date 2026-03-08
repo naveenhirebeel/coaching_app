@@ -40,7 +40,9 @@ function AttendanceContent() {
       setStudents(studentData)
 
       if (aRes.ok) {
-        const existing: { id: string; student_id: string; status: MarkedStatus; exit_time: string | null }[] = await aRes.json()
+        const existing: { id: string; student_id: string; status: MarkedStatus; exit_time: string | null; created_at: string }[] = await aRes.json()
+        // Sort ascending so the last forEach write is the latest record per student
+        existing.sort((a, b) => a.created_at.localeCompare(b.created_at))
         const map: MarkedMap = {}
         const idMap: AttendanceIdMap = {}
         const exitMap: ExitMap = {}
@@ -50,6 +52,9 @@ function AttendanceContent() {
           if (r.exit_time) {
             const t = new Date(r.exit_time)
             exitMap[r.student_id] = t.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+          } else {
+            // Latest record has no exit — clear any previously set exit from an older row
+            delete exitMap[r.student_id]
           }
         })
         setMarked(map)

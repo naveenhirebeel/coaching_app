@@ -56,9 +56,10 @@ create table attendance (
   date date not null,
   status text check (status in ('present', 'absent', 'late')) not null,
   exit_time timestamptz,
-  created_at timestamptz default now(),
-  unique(student_id, date, batch_id)
+  created_at timestamptz default now()
+  -- no unique constraint: multiple entries per student/day allowed for full audit log
 );
+
 
 
 -- ─────────────────────────────────────────────
@@ -76,3 +77,6 @@ create table attendance (
 -- alter table attendance drop constraint if exists attendance_status_check;
 -- alter table attendance add constraint attendance_status_check check (status in ('present', 'absent', 'late'));
 -- alter table attendance add column if not exists exit_time timestamptz;
+
+-- 3. Allow multiple attendance entries per student per day (full audit log)
+-- alter table attendance drop constraint if exists attendance_student_id_date_batch_id_key;
