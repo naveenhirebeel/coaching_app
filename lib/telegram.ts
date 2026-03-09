@@ -71,6 +71,46 @@ export function exitMessage(studentName: string, batchName: string, exitTime: st
 🕐 Left at: ${exitTime}`
 }
 
+export function reportMessage(
+  studentName: string,
+  batchName: string,
+  instituteName: string,
+  periodLabel: string,
+  present: number,
+  late: number,
+  absent: number,
+  logs: { date: string; status: string; created_at: string; exit_time: string | null }[]
+) {
+  const total = present + late + absent
+  const attended = present + late
+  const pct = total > 0 ? Math.round((attended / total) * 100) : 0
+
+  const logLines = logs.map(l => {
+    const d = new Date(l.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })
+    const statusIcon = l.status === 'present' ? '✅' : l.status === 'late' ? '⏰' : '❌'
+    if (l.status === 'absent') return `${statusIcon} ${d} — ABSENT`
+    const entry = new Date(l.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+    const exit = l.exit_time
+      ? ` · Exit ${new Date(l.exit_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}`
+      : ''
+    return `${statusIcon} ${d} — ${l.status.toUpperCase()} (${entry}${exit})`
+  }).join('\n')
+
+  return `📊 <b>Attendance Report</b>
+🏫 ${instituteName}
+
+<b>${studentName}</b>
+📚 ${batchName}
+📅 Period: ${periodLabel}
+
+✅ Present: ${present}${late > 0 ? `\n⏰ Late: ${late}` : ''}
+❌ Absent: ${absent}
+📈 Attendance: <b>${pct}%</b>
+
+📋 <b>Session Log:</b>
+${logLines || 'No records for this period.'}`
+}
+
 export function welcomeMessage(studentName: string, batchName: string, instituteName: string) {
   return `👋 <b>Welcome to ${instituteName}!</b>
 

@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabaseAdmin
     .from('attendance')
-    .select('id, student_id, status, date, created_at, exit_time, students(name), batches(name)')
+    .select('id, student_id, status, date, created_at, exit_time, students(name, parent_telegram_chat_id), batches(name)')
     .eq('institute_id', user.institute_id)
     .order('date', { ascending: false })
     .order('created_at', { ascending: true })
@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
   // Aggregate by student with full log
   const summary: Record<string, {
     name: string
+    parent_telegram_chat_id: string | null
     present: number
     late: number
     absent: number
@@ -36,8 +37,9 @@ export async function GET(req: NextRequest) {
 
   for (const record of data || []) {
     const id = record.student_id
+    const stu = record.students as { name?: string; parent_telegram_chat_id?: string | null } | null
     if (!summary[id]) {
-      summary[id] = { name: (record.students as { name?: string })?.name || '', present: 0, late: 0, absent: 0, logs: [] }
+      summary[id] = { name: stu?.name || '', parent_telegram_chat_id: stu?.parent_telegram_chat_id ?? null, present: 0, late: 0, absent: 0, logs: [] }
     }
     if (record.status === 'present') summary[id].present++
     else if (record.status === 'late') summary[id].late++
@@ -45,5 +47,9 @@ export async function GET(req: NextRequest) {
     summary[id].logs.push({ id: record.id, date: record.date, status: record.status, created_at: record.created_at, exit_time: record.exit_time })
   }
 
-  return NextResponse.json(Object.values(summary).sort((a, b) => a.name.localeCompare(b.name)))
+  return NextResponse.json(
+    Object.entries(summary)
+      .map(([student_id, s]) => ({ student_id, ...s }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  )
 }

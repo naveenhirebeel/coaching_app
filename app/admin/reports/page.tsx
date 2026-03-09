@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
 
 type LogEntry = { id: string; date: string; status: string; created_at: string; exit_time: string | null }
-type ReportRow = { name: string; present: number; late: number; absent: number; logs: LogEntry[] }
+type ReportRow = { student_id: string; name: string; parent_telegram_chat_id: string | null; present: number; late: number; absent: number; logs: LogEntry[] }
 type Batch = { id: string; name: string; subject: string }
 
 function fmt(dateStr: string) {
@@ -20,6 +20,12 @@ const STATUS_STYLE: Record<string, string> = {
   absent: 'bg-red-100 text-red-700',
 }
 
+const PERIOD_OPTIONS = [
+  { value: 'week', label: 'Last 7 Days' },
+  { value: 'fortnight', label: 'Last 14 Days' },
+  { value: 'month', label: 'Last 30 Days' },
+]
+
 export default function ReportsPage() {
   const router = useRouter()
   const [report, setReport] = useState<ReportRow[]>([])
@@ -27,6 +33,9 @@ export default function ReportsPage() {
   const [filters, setFilters] = useState({ batch_id: '', from: '', to: '' })
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
+  const [sendingId, setSendingId] = useState<string | null>(null)
+  const [sendPeriod, setSendPeriod] = useState<Record<string, string>>({})
+  const [sendStatus, setSendStatus] = useState<Record<string, 'ok' | 'err'>>({})
 
   function getToken() { return localStorage.getItem('token') || '' }
 
@@ -53,6 +62,38 @@ export default function ReportsPage() {
     setExpanded(prev => ({ ...prev, [i]: !prev[i] }))
   }
 
+  function downloadCSV() {
+    const rows: string[] = ['Student Name,Date,Status,Entry Time,Exit Time']
+    for (const row of report) {
+      for (const log of row.logs) {
+        const date = new Date(log.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })
+        const entry = fmtTime(log.created_at)
+        const exit = log.exit_time ? fmtTime(log.exit_time) : ''
+        rows.push(`"${row.name}","${date}","${log.status}","${entry}","${exit}"`)
+      }
+    }
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `attendance-report-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function sendReport(studentId: string) {
+    const period = sendPeriod[studentId] || 'week'
+    setSendingId(studentId)
+    const res = await fetch('/api/reports/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ student_id: studentId, period }),
+    })
+    setSendingId(null)
+    setSendStatus(prev => ({ ...prev, [studentId]: res.ok ? 'ok' : 'err' }))
+    setTimeout(() => setSendStatus(prev => { const n = { ...prev }; delete n[studentId]; return n }), 3000)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <PageHeader title="Attendance Reports" backHref="/admin/dashboard" homeHref="/admin/dashboard" />
@@ -72,9 +113,19 @@ export default function ReportsPage() {
             <input type="date" className="flex-1 border rounded-lg px-3 py-2 text-sm"
               value={filters.to} onChange={e => setFilters({ ...filters, to: e.target.value })} />
           </div>
-          <button onClick={loadReport} className="w-full bg-orange-500 text-white py-2 rounded-lg text-sm font-medium hover:bg-orange-600">
-            Apply Filter
-          </button>
+          <div className="flex gap-2">
+            <button onClick={loadReport} className="flex-1 bg-orange-500 text-white py-2 rounded-lg text-sm font-medium hover:bg-orange-600">
+              Apply Filter
+            </button>
+            {report.length > 0 && (
+              <button onClick={downloadCSV} className="flex-1 flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download CSV
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Report */}
@@ -89,10 +140,13 @@ export default function ReportsPage() {
               const attended = row.present + row.late
               const pct = total > 0 ? Math.round((attended / total) * 100) : 0
               const isOpen = !!expanded[i]
+              const hasTelegram = !!row.parent_telegram_chat_id
+              const isSending = sendingId === row.student_id
+              const status = sendStatus[row.student_id]
 
               return (
                 <div key={i} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                  {/* Summary row — tap to expand */}
+                  {/* Summary row */}
                   <button
                     onClick={() => toggleExpand(i)}
                     className="w-full text-left px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition"
@@ -111,6 +165,35 @@ export default function ReportsPage() {
                       <span className="text-gray-400 text-xs">{isOpen ? '▲' : '▼'}</span>
                     </div>
                   </button>
+
+                  {/* Send report to parent */}
+                  <div className="px-4 pb-3 border-t pt-3 flex items-center gap-2">
+                    <select
+                      value={sendPeriod[row.student_id] || 'week'}
+                      onChange={e => setSendPeriod(prev => ({ ...prev, [row.student_id]: e.target.value }))}
+                      className="border rounded-lg px-2 py-1.5 text-xs text-gray-700 bg-white"
+                    >
+                      {PERIOD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <button
+                      onClick={() => sendReport(row.student_id)}
+                      disabled={!hasTelegram || isSending}
+                      title={hasTelegram ? 'Send report to parent on Telegram' : 'Parent has no Telegram configured'}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50 ${
+                        status === 'ok' ? 'bg-green-100 text-green-700' :
+                        status === 'err' ? 'bg-red-100 text-red-700' :
+                        'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                      }`}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                      {isSending ? 'Sending...' : status === 'ok' ? 'Sent!' : status === 'err' ? 'Failed' : 'Send to Parent'}
+                    </button>
+                    {!hasTelegram && (
+                      <span className="text-xs text-gray-400">No Telegram</span>
+                    )}
+                  </div>
 
                   {/* Timeline log */}
                   {isOpen && (
