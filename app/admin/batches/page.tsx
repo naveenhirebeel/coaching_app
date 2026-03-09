@@ -77,6 +77,19 @@ export default function BatchesPage() {
   const [editSlots, setEditSlots] = useState<Slot[]>([])
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  async function handleDelete(id: string) {
+    if (!confirm('Delete this batch? This cannot be undone.')) return
+    setDeletingId(id)
+    await fetch('/api/batches', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ id }),
+    })
+    setDeletingId(null)
+    load()
+  }
 
   function getToken() { return localStorage.getItem('token') || '' }
 
@@ -206,8 +219,14 @@ export default function BatchesPage() {
                       <SlotDisplay slots={b.schedule_slots} />
                       {b.teachers?.name && <p className="text-xs text-blue-600 mt-1">Teacher: {b.teachers.name}</p>}
                     </div>
-                    <button onClick={() => startEdit(b)}
-                      className="text-xs text-gray-400 hover:text-blue-600 ml-2 shrink-0">Edit</button>
+                    <div className="flex gap-2 ml-2 shrink-0">
+                      <button onClick={() => startEdit(b)}
+                        className="text-xs text-gray-400 hover:text-blue-600">Edit</button>
+                      <button onClick={() => handleDelete(b.id)} disabled={deletingId === b.id}
+                        className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50">
+                        {deletingId === b.id ? '...' : 'Delete'}
+                      </button>
+                    </div>
                   </div>
                 </>
               )}

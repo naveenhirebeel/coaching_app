@@ -22,7 +22,7 @@ function AttendanceContent() {
   const [attendanceIds, setAttendanceIds] = useState<AttendanceIdMap>({})
   const [exits, setExits] = useState<ExitMap>({})
   const [exitSending, setExitSending] = useState<Record<string, boolean>>({})
-  const [notifyPresent, setNotifyPresent] = useState(false)
+  const [notifyPresent, setNotifyPresent] = useState(true)
 
   function getToken() { return localStorage.getItem('token') || '' }
 
