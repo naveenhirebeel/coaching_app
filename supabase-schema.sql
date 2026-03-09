@@ -52,7 +52,7 @@ create table students (
 create table attendance (
   id uuid primary key default gen_random_uuid(),
   institute_id uuid references institutes(id) on delete cascade,
-  batch_id uuid references batches(id) on delete cascade,
+  batch_id uuid references batches(id) on delete set null,
   student_id uuid references students(id) on delete cascade,
   date date not null,
   status text check (status in ('present', 'absent', 'late')) not null,
@@ -84,3 +84,8 @@ create table attendance (
 
 -- 4. Batch schedule slots (JSONB — multiple day/time slots per batch)
 -- alter table batches add column if not exists schedule_slots jsonb default '[]';
+
+-- 5. Preserve attendance history when batch is deleted (set null instead of cascade)
+-- alter table attendance drop constraint attendance_batch_id_fkey;
+-- alter table attendance add constraint attendance_batch_id_fkey
+--   foreign key (batch_id) references batches(id) on delete set null;
