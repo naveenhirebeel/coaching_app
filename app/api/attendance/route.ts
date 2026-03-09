@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
   ])
 
   const batchName = batch?.name || 'Class'
+  const instituteName = (batch?.institutes as { name?: string })?.name || ''
   const institutePhone = (batch?.institutes as { phone?: string })?.phone || ''
   const now = new Date()
   const formattedDate = now.toLocaleDateString('en-IN', {
@@ -62,13 +63,13 @@ export async function POST(req: NextRequest) {
   let notified = false
   if (student?.parent_telegram_chat_id) {
     if (status === 'absent') {
-      await sendTelegramMessage(student.parent_telegram_chat_id, absentMessage(student.name, batchName, formattedDate, institutePhone))
+      await sendTelegramMessage(student.parent_telegram_chat_id, absentMessage(student.name, batchName, formattedDate, instituteName, institutePhone))
       notified = true
     } else if (status === 'late') {
-      await sendTelegramMessage(student.parent_telegram_chat_id, lateMessage(student.name, batchName, formattedDate, institutePhone))
+      await sendTelegramMessage(student.parent_telegram_chat_id, lateMessage(student.name, batchName, formattedDate, instituteName, institutePhone))
       notified = true
     } else if (status === 'present' && notify_present) {
-      await sendTelegramMessage(student.parent_telegram_chat_id, presentMessage(student.name, batchName, formattedDate))
+      await sendTelegramMessage(student.parent_telegram_chat_id, presentMessage(student.name, batchName, formattedDate, instituteName))
       notified = true
     }
   }
@@ -85,7 +86,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data: record, error: fetchError } = await supabaseAdmin
     .from('attendance')
-    .select('id, exit_time, students(name, parent_telegram_chat_id), batches(name)')
+    .select('id, exit_time, students(name, parent_telegram_chat_id), batches(name, institutes(name))')
     .eq('id', attendance_id)
     .eq('institute_id', user.institute_id)
     .single()
@@ -106,10 +107,12 @@ export async function PATCH(req: NextRequest) {
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
 
   const student = record.students as unknown as { name: string; parent_telegram_chat_id: string } | null
-  const batchName = (record.batches as { name?: string })?.name || 'Class'
+  const batch = record.batches as unknown as { name?: string; institutes?: { name?: string } } | null
+  const batchName = batch?.name || 'Class'
+  const instituteName = batch?.institutes?.name || ''
 
   if (student?.parent_telegram_chat_id) {
-    await sendTelegramMessage(student.parent_telegram_chat_id, exitMessage(student.name, batchName, formattedTime))
+    await sendTelegramMessage(student.parent_telegram_chat_id, exitMessage(student.name, batchName, formattedTime, instituteName))
   }
 
   return NextResponse.json({ success: true, exit_time: formattedTime })

@@ -26,8 +26,9 @@ export async function sendTelegramMessage(chatId: string, message: string): Prom
   }
 }
 
-export function absentMessage(studentName: string, batchName: string, date: string, institutePhone: string) {
+export function absentMessage(studentName: string, batchName: string, date: string, instituteName: string, institutePhone: string) {
   return `⚠️ <b>Attendance Alert</b>
+🏫 ${instituteName}
 
 <b>${studentName}</b> was marked <b>ABSENT</b> today.
 📚 Batch: ${batchName}
@@ -35,8 +36,9 @@ export function absentMessage(studentName: string, batchName: string, date: stri
 📞 Contact: ${institutePhone}`
 }
 
-export function presentMessage(studentName: string, batchName: string, date: string) {
+export function presentMessage(studentName: string, batchName: string, date: string, instituteName: string) {
   return `✅ <b>Attendance Update</b>
+🏫 ${instituteName}
 
 <b>${studentName}</b> attended class today.
 📚 Batch: ${batchName}
@@ -50,8 +52,9 @@ export function holidayMessage(batchName: string, message: string, instituteName
 ${message}`
 }
 
-export function lateMessage(studentName: string, batchName: string, date: string, institutePhone: string) {
+export function lateMessage(studentName: string, batchName: string, date: string, instituteName: string, institutePhone: string) {
   return `⏰ <b>Late Arrival Notice</b>
+🏫 ${instituteName}
 
 <b>${studentName}</b> arrived <b>LATE</b> to class today.
 📚 Batch: ${batchName}
@@ -59,8 +62,9 @@ export function lateMessage(studentName: string, batchName: string, date: string
 📞 Contact: ${institutePhone}`
 }
 
-export function exitMessage(studentName: string, batchName: string, exitTime: string) {
+export function exitMessage(studentName: string, batchName: string, exitTime: string, instituteName: string) {
   return `🏠 <b>Left Class</b>
+🏫 ${instituteName}
 
 <b>${studentName}</b> has left class.
 📚 Batch: ${batchName}
