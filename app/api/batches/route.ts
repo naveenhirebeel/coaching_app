@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { name, subject, schedule, teacher_id } = await req.json()
+  const { name, subject, schedule_slots, teacher_id } = await req.json()
 
   if (!name || !subject) {
     return NextResponse.json({ error: 'Name and subject are required' }, { status: 400 })
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('batches')
-    .insert({ name, subject, schedule, teacher_id, institute_id: user.institute_id })
+    .insert({ name, subject, schedule_slots: schedule_slots ?? [], teacher_id, institute_id: user.institute_id })
     .select()
     .single()
 
@@ -40,12 +40,12 @@ export async function PATCH(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, name, subject, schedule, teacher_id } = await req.json()
+  const { id, name, subject, schedule_slots, teacher_id } = await req.json()
   if (!id || !name || !subject) return NextResponse.json({ error: 'ID, name and subject are required' }, { status: 400 })
 
   const { data, error } = await supabaseAdmin
     .from('batches')
-    .update({ name, subject, schedule, teacher_id })
+    .update({ name, subject, schedule_slots: schedule_slots ?? [], teacher_id })
     .eq('id', id)
     .eq('institute_id', user.institute_id)
     .select()

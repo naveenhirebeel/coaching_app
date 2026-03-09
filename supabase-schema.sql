@@ -35,6 +35,7 @@ create table batches (
   name text not null,
   subject text not null,
   schedule text,
+  schedule_slots jsonb default '[]', -- e.g. [{"day":"Mon","start":"16:00","end":"17:00"}]
   created_at timestamptz default now()
 );
 
@@ -80,3 +81,6 @@ create table attendance (
 
 -- 3. Allow multiple attendance entries per student per day (full audit log)
 -- alter table attendance drop constraint if exists attendance_student_id_date_batch_id_key;
+
+-- 4. Batch schedule slots (JSONB — multiple day/time slots per batch)
+-- alter table batches add column if not exists schedule_slots jsonb default '[]';

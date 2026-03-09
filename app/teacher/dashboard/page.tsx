@@ -4,8 +4,32 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PageHeader from '@/components/PageHeader'
 
-type Batch = { id: string; name: string; subject: string; schedule: string }
+type Slot = { day: string; start: string; end: string }
+type Batch = { id: string; name: string; subject: string; schedule_slots: Slot[] }
 type AttendanceRow = { batch_id: string; status: string; exit_time: string | null }
+
+const DAY_ORDER = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function fmt12(t: string) {
+  if (!t) return ''
+  const [h, m] = t.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
+}
+
+function sortBatches(batches: Batch[]): Batch[] {
+  const todayDay = DAY_ORDER[new Date().getDay()]
+  return [...batches].sort((a, b) => {
+    const aSlot = a.schedule_slots?.find(s => s.day === todayDay)
+    const bSlot = b.schedule_slots?.find(s => s.day === todayDay)
+    if (aSlot && !bSlot) return -1
+    if (!aSlot && bSlot) return 1
+    if (aSlot && bSlot) return aSlot.start.localeCompare(bSlot.start)
+    const aFirst = a.schedule_slots?.[0]?.start || '99:99'
+    const bFirst = b.schedule_slots?.[0]?.start || '99:99'
+    return aFirst.localeCompare(bFirst)
+  })
+}
 
 export default function TeacherDashboard() {
   const router = useRouter()
@@ -28,7 +52,7 @@ export default function TeacherDashboard() {
       fetch(`/api/attendance?date=${todayDate}`, { headers: { Authorization: `Bearer ${token}` } }),
     ]).then(async ([bRes, aRes]) => {
       if (bRes.status === 401) return router.push('/teacher/login')
-      setBatches(await bRes.json())
+      setBatches(sortBatches(await bRes.json()))
       if (aRes.ok) setTodayAttendance(await aRes.json())
     })
   }, [router])
@@ -82,7 +106,9 @@ export default function TeacherDashboard() {
                   <div>
                     <p className="font-semibold text-gray-900">{b.name}</p>
                     <p className="text-sm text-gray-500">{b.subject}</p>
-                    {b.schedule && <p className="text-xs text-gray-400 mt-0.5">{b.schedule}</p>}
+                    {b.schedule_slots?.map((s, i) => (
+                      <p key={i} className="text-xs text-gray-400 mt-0.5">{s.day} · {fmt12(s.start)} – {fmt12(s.end)}</p>
+                    ))}
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ml-2 shrink-0 ${
                     attendanceDone ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
