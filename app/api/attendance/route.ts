@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser } from '@/lib/auth'
-import { sendTelegramMessage, absentMessage, presentMessage, lateMessage, exitMessage } from '@/lib/telegram'
+import { sendTelegramMessage, absentMessage, presentMessage, lateMessage, exitMessage, logTelegramMessage } from '@/lib/telegram'
+import { logActivity } from '@/lib/activity-logger'
 
 export async function GET(req: NextRequest) {
   const user = getAuthUser(req)
@@ -63,16 +64,30 @@ export async function POST(req: NextRequest) {
   let notified = false
   if (student?.parent_telegram_chat_id) {
     if (status === 'absent') {
-      await sendTelegramMessage(student.parent_telegram_chat_id, absentMessage(student.name, batchName, formattedDate, instituteName, institutePhone))
+      const msg = absentMessage(student.name, batchName, formattedDate, instituteName, institutePhone)
+      await sendTelegramMessage(student.parent_telegram_chat_id, msg)
+      logTelegramMessage(user.institute_id, student_id, batch_id, student.parent_telegram_chat_id, 'absent', msg, 'sent').catch(console.error)
       notified = true
     } else if (status === 'late') {
-      await sendTelegramMessage(student.parent_telegram_chat_id, lateMessage(student.name, batchName, formattedDate, instituteName, institutePhone))
+      const msg = lateMessage(student.name, batchName, formattedDate, instituteName, institutePhone)
+      await sendTelegramMessage(student.parent_telegram_chat_id, msg)
+      logTelegramMessage(user.institute_id, student_id, batch_id, student.parent_telegram_chat_id, 'late', msg, 'sent').catch(console.error)
       notified = true
     } else if (status === 'present' && notify_present) {
-      await sendTelegramMessage(student.parent_telegram_chat_id, presentMessage(student.name, batchName, formattedDate, instituteName))
+      const msg = presentMessage(student.name, batchName, formattedDate, instituteName)
+      await sendTelegramMessage(student.parent_telegram_chat_id, msg)
+      logTelegramMessage(user.institute_id, student_id, batch_id, student.parent_telegram_chat_id, 'present', msg, 'sent').catch(console.error)
       notified = true
     }
   }
+
+  // Log activity
+  logActivity(user.institute_id, 'attendance_marked', 'admin', user.id, 'attendance', inserted?.id || '', student?.name || '', {
+    status,
+    batch: batchName,
+    date,
+    notified
+  }).catch(console.error)
 
   return NextResponse.json({ success: true, notified, attendance_id: inserted?.id })
 }
@@ -86,7 +101,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data: record, error: fetchError } = await supabaseAdmin
     .from('attendance')
-    .select('id, exit_time, students(name, parent_telegram_chat_id), batches(name, institutes(name))')
+    .select('id, exit_time, student_id, batch_id, students(name, parent_telegram_chat_id), batches(name, institutes(name))')
     .eq('id', attendance_id)
     .eq('institute_id', user.institute_id)
     .single()
@@ -112,8 +127,16 @@ export async function PATCH(req: NextRequest) {
   const instituteName = batch?.institutes?.name || ''
 
   if (student?.parent_telegram_chat_id) {
-    await sendTelegramMessage(student.parent_telegram_chat_id, exitMessage(student.name, batchName, formattedTime, instituteName))
+    const msg = exitMessage(student.name, batchName, formattedTime, instituteName)
+    await sendTelegramMessage(student.parent_telegram_chat_id, msg)
+    logTelegramMessage(user.institute_id, record.student_id || '', record.batch_id, student.parent_telegram_chat_id, 'exit', msg, 'sent').catch(console.error)
   }
+
+  // Log activity
+  logActivity(user.institute_id, 'attendance_exit', 'admin', user.id, 'attendance', attendance_id, student?.name || '', {
+    exit_time: formattedTime,
+    batch: batchName
+  }).catch(console.error)
 
   return NextResponse.json({ success: true, exit_time: formattedTime })
 }

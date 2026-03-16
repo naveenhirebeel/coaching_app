@@ -117,3 +117,20 @@ export function welcomeMessage(studentName: string, batchName: string, institute
 <b>${studentName}</b> has been enrolled in <b>${batchName}</b>.
 You will receive attendance alerts here automatically.`
 }
+
+export async function logTelegramMessage(
+  instituteId: string,
+  studentId: string,
+  batchId: string | null,
+  parentTgId: string,
+  messageType: string,
+  messageContent: string,
+  status: 'sent' | 'failed'
+) {
+  // Fire-and-forget; don't block message sending
+  fetch(typeof window === 'undefined' ? new URL('/api/super-admin/telegram-log', process.env.NEXTAUTH_URL).toString() : '/api/super-admin/telegram-log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ instituteId, studentId, batchId, parentTgId, messageType, messageContent, status })
+  }).catch(console.error)
+}

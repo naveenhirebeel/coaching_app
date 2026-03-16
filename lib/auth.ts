@@ -46,3 +46,17 @@ export function getSuperAdminUser(req: NextRequest) {
   if (!token) return null
   return verifySuperAdminToken(token)
 }
+
+export async function isApprovedInstitute(instituteId: string): Promise<boolean> {
+  try {
+    const { supabaseAdmin } = await import('@/lib/supabase')
+    const { data } = await supabaseAdmin
+      .from('institutes')
+      .select('status')
+      .eq('id', instituteId)
+      .single()
+    return data?.status === 'approved'
+  } catch {
+    return false
+  }
+}

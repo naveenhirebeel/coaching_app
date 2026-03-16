@@ -1,19 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { getAuthUser } from '@/lib/auth'
+import { getAuthUser, getSuperAdminUser, isApprovedInstitute } from '@/lib/auth'
 import { sendTelegramMessage } from '@/lib/telegram'
+import { logActivity } from '@/lib/activity-logger'
 
 export async function GET(req: NextRequest) {
-  const user = getAuthUser(req)
+  const user = getAuthUser(req) || getSuperAdminUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  let instituteId = user.institute_id
+  if (user.role === 'super_admin') {
+    const { searchParams } = new URL(req.url)
+    const paramInstitute = searchParams.get('institute_id')
+    if (paramInstitute) {
+      const approved = await isApprovedInstitute(paramInstitute)
+      if (!approved) return NextResponse.json({ error: 'Institute not approved' }, { status: 403 })
+      instituteId = paramInstitute
+    } else {
+      return NextResponse.json({ error: 'institute_id required for super_admin' }, { status: 400 })
+    }
+  } else if (user.role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { data, error } = await supabaseAdmin
     .from('teachers')
     .select('id, name, phone, telegram_chat_id, created_at')
-    .eq('institute_id', user.institute_id)
+    .eq('institute_id', instituteId)
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Fire-and-forget audit log for super_admin
+  if (user.role === 'super_admin') {
+    fetch(new URL('/api/super-admin/audit', req.url).toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: req.headers.get('Authorization')! },
+      body: JSON.stringify({ action: 'view_teachers', institute_id: instituteId })
+    }).catch(console.error)
+  }
+
   return NextResponse.json(data)
 }
 
@@ -34,6 +60,13 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Log activity
+  logActivity(user.institute_id, 'teacher_added', 'admin', user.id, 'teacher', data.id, name, {
+    phone,
+    telegram_configured: !!telegram_chat_id
+  }).catch(console.error)
+
   return NextResponse.json(data)
 }
 
@@ -87,5 +120,11 @@ export async function DELETE(req: NextRequest) {
     .eq('institute_id', user.institute_id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Log activity
+  logActivity(user.institute_id, 'teacher_deleted', 'admin', user.id, 'teacher', id, teacher.name, {
+    telegram_notified: !!teacher.telegram_chat_id
+  }).catch(console.error)
+
   return NextResponse.json({ success: true })
 }
