@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   const user = getAuthUser(req) || getSuperAdminUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  let instituteId = user.institute_id
+  let instituteId = ('institute_id' in user ? user.institute_id : '') as string
   if (user.role === 'super_admin') {
     const { searchParams } = new URL(req.url)
     const paramInstitute = searchParams.get('institute_id')

@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
-  let instituteId = user.institute_id
+  let instituteId = ('institute_id' in user ? user.institute_id : '') as string
   if (user.role === 'super_admin') {
     const paramInstitute = searchParams.get('institute_id')
     if (paramInstitute) {
