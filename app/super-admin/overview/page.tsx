@@ -159,7 +159,7 @@ export default function SuperAdminOverview() {
             <label className="block text-sm font-medium text-gray-700 mb-2">Select Institute</label>
             <select
               value={selectedInstitute}
-              onChange={e => { setSelectedInstitute(e.target.value); setTab('batches'); setReportExpanded({}); setAuditPage(1) }}
+              onChange={e => { setSelectedInstitute(e.target.value); setTab('batches'); setReportExpanded({}); setActivityPage(1) }}
               className="w-full border rounded-lg px-3 py-2 text-sm"
             >
               <option value="">Choose an institute...</option>
