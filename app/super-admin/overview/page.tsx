@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
 
@@ -31,12 +31,7 @@ const STATUS_STYLE: Record<string, string> = {
   absent: 'bg-red-100 text-red-700',
 }
 
-function Suspense({ children }: { children: React.ReactNode }) {
-  const searchParams = useSearchParams()
-  return <>{children}</>
-}
-
-export default function SuperAdminOverview() {
+function OverviewContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const instituteIdParam = searchParams.get('institute_id')
@@ -152,8 +147,7 @@ export default function SuperAdminOverview() {
     <div className="min-h-screen bg-gray-50">
       <PageHeader title="Institute Oversight" backHref="/super-admin/dashboard" homeHref="/super-admin/dashboard" />
 
-      <Suspense>
-        <main className="p-4 max-w-6xl mx-auto space-y-4">
+      <main className="p-4 max-w-6xl mx-auto space-y-4">
           {/* Institute Selector */}
           <div className="bg-white rounded-xl shadow-sm p-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Select Institute</label>
@@ -457,8 +451,15 @@ export default function SuperAdminOverview() {
               </div>
             </>
           )}
-        </main>
-      </Suspense>
+      </main>
     </div>
+  )
+}
+
+export default function SuperAdminOverview() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400">Loading...</div>}>
+      <OverviewContent />
+    </Suspense>
   )
 }
