@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     } else {
       return NextResponse.json({ error: 'institute_id required for super_admin' }, { status: 400 })
     }
-  } else if (user.role !== 'admin') {
+  } else if (user.role !== 'admin' && user.role !== 'teacher') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
