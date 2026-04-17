@@ -8,7 +8,7 @@ type Batch = { id: string; name: string; subject: string; schedule_slots: any[];
 type Teacher = { id: string; name: string; phone: string; telegram_chat_id: string | null; created_at: string }
 type Student = { id: string; name: string; parent_name?: string; parent_telegram_chat_id?: string; batch_id?: string; batches?: { name?: string }; created_at: string }
 type Report = { student_id: string; name: string; parent_telegram_chat_id: string | null; present: number; late: number; absent: number; logs: any[] }
-type Communication = { id: string; sent_at: string; student_name: string; batch_name: string; message_type: string; recipient_telegram_chat_id: string; status: string }
+type Communication = { id: string; sent_at: string; student_name: string; batch_name: string; message_type: string; message_content: string; recipient_telegram_chat_id: string; status: string }
 type ActivityLog = { id: string; event_type: string; actor_type: string; entity_name: string; entity_type: string; details: any; created_at: string }
 
 function fmt(dateStr: string) {
@@ -49,6 +49,7 @@ function OverviewContent() {
   const [reportExpanded, setReportExpanded] = useState<Record<number, boolean>>({})
   const [communications, setCommunications] = useState<Communication[]>([])
   const [commFilters, setCommFilters] = useState({ message_type: '', from_date: '', to_date: '', student_name: '' })
+  const [commExpanded, setCommExpanded] = useState<Record<string, boolean>>({})
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
   const [activityPage, setActivityPage] = useState(1)
   const [activityTotal, setActivityTotal] = useState(0)
@@ -153,7 +154,7 @@ function OverviewContent() {
             <label className="block text-sm font-medium text-gray-700 mb-2">Select Institute</label>
             <select
               value={selectedInstitute}
-              onChange={e => { setSelectedInstitute(e.target.value); setTab('batches'); setReportExpanded({}); setActivityPage(1) }}
+              onChange={e => { setSelectedInstitute(e.target.value); setTab('batches'); setReportExpanded({}); setActivityPage(1); setCommExpanded({}) }}
               className="w-full border rounded-lg px-3 py-2 text-sm"
             >
               <option value="">Choose an institute...</option>
@@ -354,24 +355,44 @@ function OverviewContent() {
                             <th className="px-4 py-2 font-semibold text-gray-700">Batch</th>
                             <th className="px-4 py-2 font-semibold text-gray-700">Type</th>
                             <th className="px-4 py-2 font-semibold text-gray-700">Status</th>
+                            <th className="px-4 py-2 font-semibold text-gray-700">Message</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y">
                           {communications.length === 0 ? (
-                            <tr><td colSpan={5} className="text-center text-gray-400 py-8">No messages</td></tr>
+                            <tr><td colSpan={6} className="text-center text-gray-400 py-8">No messages</td></tr>
                           ) : (
                             communications.map(c => (
-                              <tr key={c.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-2 text-xs text-gray-600">{fmtTime(c.sent_at)}</td>
-                                <td className="px-4 py-2 text-gray-900">{c.student_name}</td>
-                                <td className="px-4 py-2 text-gray-600">{c.batch_name}</td>
-                                <td className="px-4 py-2"><span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">{c.message_type}</span></td>
-                                <td className="px-4 py-2">
-                                  <span className={`text-xs px-2 py-1 rounded ${c.status === 'sent' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                    {c.status === 'sent' ? '✓ Sent' : '✗ Failed'}
-                                  </span>
-                                </td>
-                              </tr>
+                              <>
+                                <tr key={c.id} className="hover:bg-gray-50">
+                                  <td className="px-4 py-2 text-xs text-gray-600 whitespace-nowrap">{fmtTime(c.sent_at)}</td>
+                                  <td className="px-4 py-2 text-gray-900">{c.student_name}</td>
+                                  <td className="px-4 py-2 text-gray-600">{c.batch_name}</td>
+                                  <td className="px-4 py-2"><span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded capitalize">{c.message_type}</span></td>
+                                  <td className="px-4 py-2">
+                                    <span className={`text-xs px-2 py-1 rounded ${c.status === 'sent' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                      {c.status === 'sent' ? '✓ Sent' : '✗ Failed'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2">
+                                    <button
+                                      onClick={() => setCommExpanded(prev => ({ ...prev, [c.id]: !prev[c.id] }))}
+                                      className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+                                    >
+                                      {commExpanded[c.id] ? 'Hide ▲' : 'View ▼'}
+                                    </button>
+                                  </td>
+                                </tr>
+                                {commExpanded[c.id] && (
+                                  <tr key={`${c.id}-msg`} className="bg-blue-50">
+                                    <td colSpan={6} className="px-6 py-3">
+                                      <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed border-l-4 border-blue-300 pl-3">
+                                        {c.message_content}
+                                      </pre>
+                                    </td>
+                                  </tr>
+                                )}
+                              </>
                             ))
                           )}
                         </tbody>

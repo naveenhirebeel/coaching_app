@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabaseAdmin
     .from('telegram_message_log')
-    .select('id, sent_at, student_id, batch_id, recipient_telegram_chat_id, message_type, status, students(name), batches(name)')
+    .select('id, sent_at, student_id, batch_id, recipient_telegram_chat_id, message_type, message_content, status, students(name), batches(name)')
     .eq('institute_id', instituteId)
     .order('sent_at', { ascending: false })
 
@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
     batch_name: (msg.batches as { name?: string } | null)?.name || 'Unknown Batch',
     recipient_telegram_chat_id: msg.recipient_telegram_chat_id,
     message_type: msg.message_type,
+    message_content: msg.message_content,
     status: msg.status,
   }))
 
