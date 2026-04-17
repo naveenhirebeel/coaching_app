@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser } from '@/lib/auth'
-import { sendTelegramMessage, holidayMessage } from '@/lib/telegram'
+import { sendTelegramMessage, holidayMessage, logTelegramMessage } from '@/lib/telegram'
 
 export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
@@ -37,17 +37,16 @@ export async function POST(req: NextRequest) {
     }
 
     const batchName = (student.batches as { name?: string })?.name || 'Class'
-    await sendTelegramMessage(
-      student.parent_telegram_chat_id,
-      holidayMessage(batchName, message, instituteName)
-    )
+    const msg = holidayMessage(batchName, message, instituteName)
+    await sendTelegramMessage(student.parent_telegram_chat_id, msg)
+    logTelegramMessage(user.institute_id, student_id, null, student.parent_telegram_chat_id, 'alert', msg, 'sent').catch(console.error)
     return NextResponse.json({ success: true, message: `Alert sent to ${student.name}'s parent.` })
   }
 
   // Batch-wise alert (batch_id = null means all batches)
   let studentsQuery = supabaseAdmin
     .from('students')
-    .select('name, parent_telegram_chat_id, batches(name)')
+    .select('id, name, parent_telegram_chat_id, batches(name)')
     .eq('institute_id', user.institute_id)
     .not('parent_telegram_chat_id', 'is', null)
 
@@ -60,10 +59,9 @@ export async function POST(req: NextRequest) {
   for (const student of students || []) {
     if (!student.parent_telegram_chat_id) continue
     const batchName = (student.batches as { name?: string })?.name || 'All Batches'
-    await sendTelegramMessage(
-      student.parent_telegram_chat_id,
-      holidayMessage(batchName, message, instituteName)
-    )
+    const msg = holidayMessage(batchName, message, instituteName)
+    await sendTelegramMessage(student.parent_telegram_chat_id, msg)
+    logTelegramMessage(user.institute_id, student.id, batch_id || null, student.parent_telegram_chat_id, 'alert', msg, 'sent').catch(console.error)
     sentCount++
   }
 

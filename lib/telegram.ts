@@ -127,10 +127,15 @@ export async function logTelegramMessage(
   messageContent: string,
   status: 'sent' | 'failed'
 ) {
-  // Fire-and-forget; don't block message sending
-  fetch(typeof window === 'undefined' ? new URL('/api/super-admin/telegram-log', process.env.NEXTAUTH_URL).toString() : '/api/super-admin/telegram-log', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ instituteId, studentId, batchId, parentTgId, messageType, messageContent, status })
-  }).catch(console.error)
+  const { supabaseAdmin } = await import('@/lib/supabase')
+  const { error } = await supabaseAdmin.from('telegram_message_log').insert({
+    institute_id: instituteId,
+    student_id: studentId,
+    batch_id: batchId || null,
+    recipient_telegram_chat_id: parentTgId,
+    message_type: messageType,
+    message_content: messageContent,
+    status,
+  })
+  if (error) console.error('Telegram log insert error:', error)
 }

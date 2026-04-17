@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser } from '@/lib/auth'
-import { sendTelegramMessage, reportMessage } from '@/lib/telegram'
+import { sendTelegramMessage, reportMessage, logTelegramMessage } from '@/lib/telegram'
 
 export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
@@ -69,6 +69,9 @@ export async function POST(req: NextRequest) {
 
   const message = reportMessage(student.name, batchName, instituteName, periodLabel, present, late, absent, dedupedLogs)
   const result = await sendTelegramMessage(student.parent_telegram_chat_id, message)
+
+  const logStatus = result.ok ? 'sent' : 'failed'
+  logTelegramMessage(user.institute_id, student_id, student.batch_id || null, student.parent_telegram_chat_id, 'alert', message, logStatus).catch(console.error)
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 })
   return NextResponse.json({ success: true })
