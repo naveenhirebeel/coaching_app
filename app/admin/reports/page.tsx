@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
+import AdminBottomNav from '@/components/AdminBottomNav'
 
 type LogEntry = { id: string; date: string; status: string; created_at: string; exit_time: string | null }
 type ReportRow = { student_id: string; name: string; parent_telegram_chat_id: string | null; present: number; late: number; absent: number; logs: LogEntry[] }
@@ -98,7 +99,7 @@ export default function ReportsPage() {
     <div className="min-h-screen bg-gray-50">
       <PageHeader title="Attendance Reports" backHref="/admin/dashboard" homeHref="/admin/dashboard" />
 
-      <main className="p-4 max-w-2xl mx-auto space-y-4">
+      <main className="p-4 max-w-2xl mx-auto space-y-4 pb-28">
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
           <h2 className="font-semibold text-gray-800">Filter</h2>
@@ -220,6 +221,7 @@ export default function ReportsPage() {
           </div>
         )}
       </main>
+      <AdminBottomNav />
     </div>
   )
 }

@@ -2,6 +2,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
+import TeacherBottomNav from '@/components/TeacherBottomNav'
 
 type Batch = { id: string; name: string; subject: string }
 type Student = { id: string; name: string; parent_name: string; batch_id: string; parent_telegram_chat_id: string }
@@ -76,7 +77,7 @@ function AlertsContent() {
     <div className="min-h-screen bg-gray-50">
       <PageHeader title="Send Alert" backHref="/teacher/dashboard" homeHref="/teacher/dashboard" />
 
-      <main className="p-4 max-w-xl mx-auto space-y-4">
+      <main className="p-4 max-w-xl mx-auto space-y-4 pb-28">
         {error && <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg">{error}</div>}
         {result && <div className="bg-green-50 text-green-700 text-sm px-4 py-3 rounded-lg">{result}</div>}
 
@@ -159,6 +160,7 @@ function AlertsContent() {
           {loading ? 'Sending...' : mode === 'student' ? 'Send Alert to Parent' : 'Send Alert to Parents'}
         </button>
       </main>
+      <TeacherBottomNav />
     </div>
   )
 }

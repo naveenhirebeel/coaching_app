@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PageHeader from '@/components/PageHeader'
+import TeacherBottomNav from '@/components/TeacherBottomNav'
 
 type Slot = { day: string; start: string; end: string }
 type Batch = { id: string; name: string; subject: string; schedule_slots: Slot[] }
@@ -85,7 +86,7 @@ export default function TeacherDashboard() {
         right={<button onClick={logout} className="text-sm text-red-600 hover:underline">Logout</button>}
       />
 
-      <main className="p-4 max-w-xl mx-auto">
+      <main className="p-4 max-w-xl mx-auto pb-28">
         <p className="text-sm text-gray-500 mb-4">{today}</p>
 
         <div className="flex justify-between items-center mb-3">
@@ -138,6 +139,7 @@ export default function TeacherDashboard() {
           )}
         </div>
       </main>
+      <TeacherBottomNav />
     </div>
   )
 }

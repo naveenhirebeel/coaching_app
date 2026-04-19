@@ -112,22 +112,22 @@ export default function SuperAdminDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <a href="/super-admin/overview"
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
-            Institute Oversight
+            <span className="hidden sm:inline">Institute </span>Oversight
           </a>
           <button onClick={() => { localStorage.removeItem('sa_token'); router.push('/super-admin/login') }}
             className="text-sm text-gray-400 hover:text-white">
-            Sign out
+            <span className="hidden sm:inline">Sign </span>Out
           </button>
         </div>
       </header>
 
       {/* Tabs */}
-      <div className="flex gap-1 px-6 pt-5 pb-1 overflow-x-auto">
+      <div className="flex gap-1 px-4 pt-5 pb-1 overflow-x-auto scrollbar-hide">
         {tabs.map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition ${
@@ -249,8 +249,8 @@ export default function SuperAdminDashboard() {
 
       {/* Reason Modal */}
       {reasonModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-sm space-y-4">
+        <div className="fixed inset-0 bg-black/60 flex items-end justify-center z-50">
+          <div className="bg-gray-800 rounded-t-2xl p-6 w-full max-w-xl space-y-4 pb-safe">
             <h2 className="font-semibold text-white">
               {reasonModal.nextStatus === 'revoked' ? 'Revoke / Reject' :
                reasonModal.nextStatus === 'suspended' ? 'Suspend' : 'Archive'} — {reasonModal.name}
@@ -279,8 +279,8 @@ export default function SuperAdminDashboard() {
 
       {/* Hard Delete Confirm Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-sm space-y-4">
+        <div className="fixed inset-0 bg-black/60 flex items-end justify-center z-50">
+          <div className="bg-gray-800 rounded-t-2xl p-6 w-full max-w-xl space-y-4 pb-safe">
             <h2 className="font-semibold text-white text-red-400">Permanent Deletion</h2>
             <p className="text-sm text-gray-300">
               This will permanently delete <span className="font-semibold text-white">{deleteConfirm.name}</span> and all associated teachers, students, batches, and attendance records.

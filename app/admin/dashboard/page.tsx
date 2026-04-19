@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PageHeader from '@/components/PageHeader'
+import AdminBottomNav from '@/components/AdminBottomNav'
 
 export default function AdminDashboard() {
   const router = useRouter()
@@ -36,7 +37,7 @@ export default function AdminDashboard() {
         right={<button onClick={logout} className="text-sm text-red-600 hover:underline">Logout</button>}
       />
 
-      <main className="p-4 max-w-2xl mx-auto">
+      <main className="p-4 max-w-2xl mx-auto pb-24">
         <h2 className="text-xl font-semibold text-gray-800 mt-4 mb-6">Admin Dashboard</h2>
         <div className="grid grid-cols-2 gap-4">
           {sections.map(s => (
@@ -52,6 +53,7 @@ export default function AdminDashboard() {
           ))}
         </div>
       </main>
+      <AdminBottomNav />
     </div>
   )
 }

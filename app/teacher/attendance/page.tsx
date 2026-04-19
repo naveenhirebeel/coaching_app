@@ -2,6 +2,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
+import TeacherBottomNav from '@/components/TeacherBottomNav'
 
 type Student = { id: string; name: string; parent_name: string }
 type MarkedStatus = 'present' | 'late' | 'absent'
@@ -143,7 +144,7 @@ function AttendanceContent() {
         homeHref="/teacher/dashboard"
       />
 
-      <main className="p-4 max-w-xl mx-auto pb-24 space-y-3">
+      <main className="p-4 max-w-xl mx-auto pb-28 space-y-3">
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer bg-white rounded-xl shadow-sm px-4 py-3">
           <input type="checkbox" checked={notifyPresent}
             onChange={e => setNotifyPresent(e.target.checked)} className="rounded" />
@@ -164,12 +165,12 @@ function AttendanceContent() {
               currentStatus === 'absent'  ? 'border-red-300' :
               'border-transparent'
             }`}>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="font-semibold text-gray-900">{s.name}</p>
-                  {s.parent_name && <p className="text-xs text-gray-400">{s.parent_name}</p>}
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">{s.name}</p>
+                  {s.parent_name && <p className="text-xs text-gray-400 truncate">{s.parent_name}</p>}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col items-end gap-1 shrink-0">
                   {exitTime && (
                     <span className="text-xs text-gray-400">Exited {exitTime}</span>
                   )}
@@ -194,7 +195,7 @@ function AttendanceContent() {
                       key={status}
                       onClick={() => mark(s.id, status)}
                       disabled={!!isSending}
-                      className={`flex-1 text-sm py-2 rounded-lg font-medium transition disabled:opacity-60 ${
+                      className={`flex-1 text-sm py-2.5 rounded-lg font-medium transition disabled:opacity-60 ${
                         isActive ? style.active : style.inactive
                       }`}
                     >
@@ -226,6 +227,7 @@ function AttendanceContent() {
           <p className="text-center text-gray-400 py-12">No students in this batch.</p>
         )}
       </main>
+      <TeacherBottomNav />
     </div>
   )
 }
