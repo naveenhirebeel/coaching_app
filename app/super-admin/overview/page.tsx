@@ -135,7 +135,7 @@ function OverviewContent() {
             <label className="block text-sm font-medium text-gray-700 mb-2">Select Institute</label>
             <select
               value={selectedInstitute}
-              onChange={e => { setSelectedInstitute(e.target.value); setTab('batches'); setReportExpanded({}); setActivityPage(1); setCommExpanded({}) }}
+              onChange={e => { setSelectedInstitute(e.target.value); setTab('batches'); setReportExpanded({}); setCommExpanded({}) }}
               className="w-full border rounded-lg px-3 py-2 text-sm"
             >
               <option value="">Choose an institute...</option>
