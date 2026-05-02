@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser, getSuperAdminUser, isApprovedInstitute } from '@/lib/auth'
 import { sendTelegramMessage } from '@/lib/telegram'
-import { logActivity } from '@/lib/activity-logger'
 
 export async function GET(req: NextRequest) {
   const user = getAuthUser(req) || getSuperAdminUser(req)
@@ -31,15 +30,6 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Fire-and-forget audit log for super_admin
-  if (user.role === 'super_admin') {
-    fetch(new URL('/api/super-admin/audit', req.url).toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: req.headers.get('Authorization')! },
-      body: JSON.stringify({ action: 'view_teachers', institute_id: instituteId })
-    }).catch(console.error)
-  }
-
   return NextResponse.json(data)
 }
 
@@ -60,12 +50,6 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // Log activity
-  logActivity(user.institute_id, 'teacher_added', 'admin', user.id, 'teacher', data.id, name, {
-    phone,
-    telegram_configured: !!telegram_chat_id
-  }).catch(console.error)
 
   return NextResponse.json(data)
 }
@@ -120,11 +104,6 @@ export async function DELETE(req: NextRequest) {
     .eq('institute_id', user.institute_id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // Log activity
-  logActivity(user.institute_id, 'teacher_deleted', 'admin', user.id, 'teacher', id, teacher.name, {
-    telegram_notified: !!teacher.telegram_chat_id
-  }).catch(console.error)
 
   return NextResponse.json({ success: true })
 }

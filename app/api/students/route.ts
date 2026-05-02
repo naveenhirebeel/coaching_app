@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser, getSuperAdminUser, isApprovedInstitute } from '@/lib/auth'
 import { sendTelegramMessage, welcomeMessage } from '@/lib/telegram'
-import { logActivity } from '@/lib/activity-logger'
 
 export async function GET(req: NextRequest) {
   const user = getAuthUser(req) || getSuperAdminUser(req)
@@ -35,15 +34,6 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // Fire-and-forget audit log for super_admin
-  if (user.role === 'super_admin') {
-    fetch(new URL('/api/super-admin/audit', req.url).toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: req.headers.get('Authorization')! },
-      body: JSON.stringify({ action: 'view_students', institute_id: instituteId })
-    }).catch(console.error)
-  }
 
   return NextResponse.json(data)
 }
@@ -79,12 +69,6 @@ export async function POST(req: NextRequest) {
       welcomeMessage(name, student.batches.name, institute?.name || 'the institute')
     )
   }
-
-  // Log activity
-  logActivity(user.institute_id, 'student_enrolled', 'admin', user.id, 'student', student.id, name, {
-    batch: student.batches.name,
-    parent_name
-  }).catch(console.error)
 
   return NextResponse.json(student)
 }
@@ -139,11 +123,6 @@ export async function DELETE(req: NextRequest) {
     .eq('institute_id', user.institute_id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // Log activity
-  logActivity(user.institute_id, 'student_deleted', 'admin', user.id, 'student', id, student.name, {
-    parent_notified: !!student.parent_telegram_chat_id
-  }).catch(console.error)
 
   return NextResponse.json({ success: true })
 }

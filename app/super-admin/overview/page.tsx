@@ -9,8 +9,6 @@ type Teacher = { id: string; name: string; phone: string; telegram_chat_id: stri
 type Student = { id: string; name: string; parent_name?: string; parent_telegram_chat_id?: string; batch_id?: string; batches?: { name?: string }; created_at: string }
 type Report = { student_id: string; name: string; parent_telegram_chat_id: string | null; present: number; late: number; absent: number; logs: any[] }
 type Communication = { id: string; sent_at: string; student_name: string; batch_name: string; message_type: string; message_content: string; recipient_telegram_chat_id: string; status: string }
-type ActivityLog = { id: string; event_type: string; actor_type: string; entity_name: string; entity_type: string; details: any; created_at: string }
-
 function fmt(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })
 }
@@ -38,7 +36,7 @@ function OverviewContent() {
 
   const [institutes, setInstitutes] = useState<Institute[]>([])
   const [selectedInstitute, setSelectedInstitute] = useState<string>('')
-  const [tab, setTab] = useState<'batches' | 'teachers' | 'students' | 'reports' | 'communications' | 'audit'>('batches')
+  const [tab, setTab] = useState<'batches' | 'teachers' | 'students' | 'reports' | 'communications'>('batches')
   const [loading, setLoading] = useState(false)
 
   const [batches, setBatches] = useState<Batch[]>([])
@@ -50,11 +48,6 @@ function OverviewContent() {
   const [communications, setCommunications] = useState<Communication[]>([])
   const [commFilters, setCommFilters] = useState({ message_type: '', from_date: '', to_date: '', student_name: '' })
   const [commExpanded, setCommExpanded] = useState<Record<string, boolean>>({})
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
-  const [activityPage, setActivityPage] = useState(1)
-  const [activityTotal, setActivityTotal] = useState(0)
-  const [activityFilters, setActivityFilters] = useState({ event_type: '', actor_type: '', from_date: '', to_date: '' })
-
   function getToken() { return localStorage.getItem('sa_token') || '' }
 
   useEffect(() => {
@@ -100,18 +93,6 @@ function OverviewContent() {
         if (commFilters.student_name) params.set('student_name', commFilters.student_name)
         const res = await fetch(`/api/super-admin/communications?${params}`, { headers: { Authorization: `Bearer ${getToken()}` } })
         setCommunications(await res.json())
-      } else if (tab === 'audit') {
-        const params = new URLSearchParams()
-        params.set('institute_id', selectedInstitute)
-        params.set('page', activityPage.toString())
-        if (activityFilters.event_type) params.set('event_type', activityFilters.event_type)
-        if (activityFilters.actor_type) params.set('actor_type', activityFilters.actor_type)
-        if (activityFilters.from_date) params.set('from_date', activityFilters.from_date)
-        if (activityFilters.to_date) params.set('to_date', activityFilters.to_date)
-        const res = await fetch(`/api/super-admin/activity-logs?${params}`, { headers: { Authorization: `Bearer ${getToken()}` } })
-        const data = await res.json()
-        setActivityLogs(data.logs || [])
-        setActivityTotal(data.total || 0)
       }
     } catch (err) {
       console.error('Load error:', err)
@@ -121,7 +102,7 @@ function OverviewContent() {
 
   useEffect(() => {
     loadTabData()
-  }, [selectedInstitute, tab, reportFilters, commFilters, activityPage, activityFilters])
+  }, [selectedInstitute, tab, reportFilters, commFilters])
 
   async function downloadReportCSV() {
     const rows: string[] = ['Student Name,Date,Status,Entry Time,Exit Time']
@@ -168,10 +149,10 @@ function OverviewContent() {
             <>
               {/* Tabs */}
               <div className="flex border-b border-gray-200 bg-white rounded-t-xl overflow-x-auto scrollbar-hide">
-                {(['batches', 'teachers', 'students', 'reports', 'communications', 'audit'] as const).map(t => (
+                {(['batches', 'teachers', 'students', 'reports', 'communications'] as const).map(t => (
                   <button
                     key={t}
-                    onClick={() => { setTab(t); setReportExpanded({}); setActivityPage(1) }}
+                    onClick={() => { setTab(t); setReportExpanded({}) }}
                     className={`px-3 py-3 text-xs font-medium transition capitalize whitespace-nowrap shrink-0 ${
                       tab === t ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600 hover:text-gray-900'
                     }`}
@@ -401,74 +382,6 @@ function OverviewContent() {
                   </>
                 )}
 
-                {/* ACTIVITY LOGS */}
-                {tab === 'audit' && !loading && (
-                  <>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pb-4">
-                      <select value={activityFilters.event_type} onChange={e => { setActivityFilters({ ...activityFilters, event_type: e.target.value }); setActivityPage(1) }} className="border rounded-lg px-3 py-2 text-sm">
-                        <option value="">All Events</option>
-                        <option value="attendance_marked">Attendance Marked</option>
-                        <option value="attendance_exit">Attendance Exit</option>
-                        <option value="student_enrolled">Student Enrolled</option>
-                        <option value="student_deleted">Student Deleted</option>
-                        <option value="teacher_added">Teacher Added</option>
-                        <option value="teacher_deleted">Teacher Deleted</option>
-                        <option value="batch_created">Batch Created</option>
-                        <option value="batch_deleted">Batch Deleted</option>
-                      </select>
-                      <select value={activityFilters.actor_type} onChange={e => { setActivityFilters({ ...activityFilters, actor_type: e.target.value }); setActivityPage(1) }} className="border rounded-lg px-3 py-2 text-sm">
-                        <option value="">All Actors</option>
-                        <option value="admin">Admin</option>
-                        <option value="teacher">Teacher</option>
-                        <option value="system">System</option>
-                      </select>
-                      <input type="date" value={activityFilters.from_date} onChange={e => { setActivityFilters({ ...activityFilters, from_date: e.target.value }); setActivityPage(1) }} className="border rounded-lg px-3 py-2 text-sm" />
-                      <input type="date" value={activityFilters.to_date} onChange={e => { setActivityFilters({ ...activityFilters, to_date: e.target.value }); setActivityPage(1) }} className="border rounded-lg px-3 py-2 text-sm" />
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-100">
-                          <tr className="text-left">
-                            <th className="px-4 py-2 font-semibold text-gray-700">Timestamp</th>
-                            <th className="px-4 py-2 font-semibold text-gray-700">Event</th>
-                            <th className="px-4 py-2 font-semibold text-gray-700">Entity</th>
-                            <th className="px-4 py-2 font-semibold text-gray-700">Actor</th>
-                            <th className="px-4 py-2 font-semibold text-gray-700">Details</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {activityLogs.length === 0 ? (
-                            <tr><td colSpan={5} className="text-center text-gray-400 py-8">No activity logs</td></tr>
-                          ) : (
-                            activityLogs.map(log => (
-                              <tr key={log.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-2 text-xs text-gray-600">{fmtTime(log.created_at)}</td>
-                                <td className="px-4 py-2 text-gray-900 capitalize">{log.event_type.replace(/_/g, ' ')}</td>
-                                <td className="px-4 py-2 text-gray-700">
-                                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded capitalize">{log.entity_type || 'N/A'}</span>
-                                  <p className="text-xs text-gray-600 mt-1">{log.entity_name}</p>
-                                </td>
-                                <td className="px-4 py-2 text-xs capitalize text-gray-600">{log.actor_type}</td>
-                                <td className="px-4 py-2 text-xs text-gray-600 max-w-xs truncate" title={JSON.stringify(log.details || {})}>
-                                  {log.details ? Object.entries(log.details).map(([k, v]) => `${k}: ${v}`).join(', ') : '—'}
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                    {activityTotal > 50 && (
-                      <div className="flex items-center justify-between pt-4">
-                        <p className="text-xs text-gray-500">Page {activityPage} of {Math.ceil(activityTotal / 50)}</p>
-                        <div className="flex gap-2">
-                          <button onClick={() => setActivityPage(p => Math.max(1, p - 1))} disabled={activityPage === 1} className="px-3 py-1 border rounded text-sm disabled:opacity-50">← Prev</button>
-                          <button onClick={() => setActivityPage(p => Math.min(Math.ceil(activityTotal / 50), p + 1))} disabled={activityPage * 50 >= activityTotal} className="px-3 py-1 border rounded text-sm disabled:opacity-50">Next →</button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
               </div>
             </>
           )}

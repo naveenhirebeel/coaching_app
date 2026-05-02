@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser, getSuperAdminUser, isApprovedInstitute } from '@/lib/auth'
-import { logActivity } from '@/lib/activity-logger'
 
 export async function GET(req: NextRequest) {
   const user = getAuthUser(req) || getSuperAdminUser(req)
@@ -30,15 +29,6 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Fire-and-forget audit log for super_admin
-  if (user.role === 'super_admin') {
-    fetch(new URL('/api/super-admin/audit', req.url).toString(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: req.headers.get('Authorization')! },
-      body: JSON.stringify({ action: 'view_batches', institute_id: instituteId })
-    }).catch(console.error)
-  }
-
   return NextResponse.json(data)
 }
 
@@ -59,13 +49,6 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // Log activity
-  logActivity(user.institute_id, 'batch_created', 'admin', user.id, 'batch', data.id, name, {
-    subject,
-    schedule_slots: schedule_slots ?? [],
-    teacher_id
-  }).catch(console.error)
 
   return NextResponse.json(data)
 }
@@ -111,9 +94,6 @@ export async function DELETE(req: NextRequest) {
     .eq('institute_id', user.institute_id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // Log activity
-  logActivity(user.institute_id, 'batch_deleted', 'admin', user.id, 'batch', id, batch?.name || 'Unknown Batch', {}).catch(console.error)
 
   return NextResponse.json({ success: true })
 }

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser } from '@/lib/auth'
 import { sendTelegramMessage, absentMessage, presentMessage, lateMessage, exitMessage, logTelegramMessage } from '@/lib/telegram'
-import { logActivity } from '@/lib/activity-logger'
 
 export async function GET(req: NextRequest) {
   const user = getAuthUser(req)
@@ -81,14 +80,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Log activity
-  logActivity(user.institute_id, 'attendance_marked', 'admin', user.id, 'attendance', inserted?.id || '', student?.name || '', {
-    status,
-    batch: batchName,
-    date,
-    notified
-  }).catch(console.error)
-
   return NextResponse.json({ success: true, notified, attendance_id: inserted?.id })
 }
 
@@ -131,12 +122,6 @@ export async function PATCH(req: NextRequest) {
     await sendTelegramMessage(student.parent_telegram_chat_id, msg)
     logTelegramMessage(user.institute_id, record.student_id || '', record.batch_id, student.parent_telegram_chat_id, 'exit', msg, 'sent').catch(console.error)
   }
-
-  // Log activity
-  logActivity(user.institute_id, 'attendance_exit', 'admin', user.id, 'attendance', attendance_id, student?.name || '', {
-    exit_time: formattedTime,
-    batch: batchName
-  }).catch(console.error)
 
   return NextResponse.json({ success: true, exit_time: formattedTime })
 }
