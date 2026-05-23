@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   // Fetch batch + student for Telegram
   const [{ data: batch }, { data: student }] = await Promise.all([
     supabaseAdmin.from('batches').select('name, institutes(name, phone)').eq('id', batch_id).single(),
-    supabaseAdmin.from('students').select('name, parent_telegram_chat_id').eq('id', student_id).single(),
+    supabaseAdmin.from('students').select('name, parent_telegram_chat_id, parent2_telegram_chat_id').eq('id', student_id).single(),
   ])
 
   const batchName = batch?.name || 'Class'
@@ -60,22 +60,23 @@ export async function POST(req: NextRequest) {
     hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata'
   })
 
+  const parentChatIds = [student?.parent_telegram_chat_id, student?.parent2_telegram_chat_id].filter(Boolean) as string[]
   let notified = false
-  if (student?.parent_telegram_chat_id) {
+  if (student && parentChatIds.length > 0) {
     if (status === 'absent') {
       const msg = absentMessage(student.name, batchName, formattedDate, instituteName, institutePhone)
-      await sendTelegramMessage(student.parent_telegram_chat_id, msg)
-      logTelegramMessage(user.institute_id, student_id, batch_id, student.parent_telegram_chat_id, 'absent', msg, 'sent').catch(console.error)
+      await Promise.all(parentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
+      parentChatIds.forEach(chatId => logTelegramMessage(user.institute_id, student_id, batch_id, chatId, 'absent', msg, 'sent').catch(console.error))
       notified = true
     } else if (status === 'late') {
       const msg = lateMessage(student.name, batchName, formattedDate, instituteName, institutePhone)
-      await sendTelegramMessage(student.parent_telegram_chat_id, msg)
-      logTelegramMessage(user.institute_id, student_id, batch_id, student.parent_telegram_chat_id, 'late', msg, 'sent').catch(console.error)
+      await Promise.all(parentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
+      parentChatIds.forEach(chatId => logTelegramMessage(user.institute_id, student_id, batch_id, chatId, 'late', msg, 'sent').catch(console.error))
       notified = true
     } else if (status === 'present' && notify_present) {
       const msg = presentMessage(student.name, batchName, formattedDate, instituteName)
-      await sendTelegramMessage(student.parent_telegram_chat_id, msg)
-      logTelegramMessage(user.institute_id, student_id, batch_id, student.parent_telegram_chat_id, 'present', msg, 'sent').catch(console.error)
+      await Promise.all(parentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
+      parentChatIds.forEach(chatId => logTelegramMessage(user.institute_id, student_id, batch_id, chatId, 'present', msg, 'sent').catch(console.error))
       notified = true
     }
   }
@@ -92,7 +93,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data: record, error: fetchError } = await supabaseAdmin
     .from('attendance')
-    .select('id, exit_time, student_id, batch_id, students(name, parent_telegram_chat_id), batches(name, institutes(name))')
+    .select('id, exit_time, student_id, batch_id, students(name, parent_telegram_chat_id, parent2_telegram_chat_id), batches(name, institutes(name))')
     .eq('id', attendance_id)
     .eq('institute_id', user.institute_id)
     .single()
@@ -112,15 +113,16 @@ export async function PATCH(req: NextRequest) {
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
 
-  const student = record.students as unknown as { name: string; parent_telegram_chat_id: string } | null
+  const student = record.students as unknown as { name: string; parent_telegram_chat_id: string; parent2_telegram_chat_id: string } | null
   const batch = record.batches as unknown as { name?: string; institutes?: { name?: string } } | null
   const batchName = batch?.name || 'Class'
   const instituteName = batch?.institutes?.name || ''
 
-  if (student?.parent_telegram_chat_id) {
+  const exitParentChatIds = [student?.parent_telegram_chat_id, student?.parent2_telegram_chat_id].filter(Boolean) as string[]
+  if (student && exitParentChatIds.length > 0) {
     const msg = exitMessage(student.name, batchName, formattedTime, instituteName)
-    await sendTelegramMessage(student.parent_telegram_chat_id, msg)
-    logTelegramMessage(user.institute_id, record.student_id || '', record.batch_id, student.parent_telegram_chat_id, 'exit', msg, 'sent').catch(console.error)
+    await Promise.all(exitParentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
+    exitParentChatIds.forEach(chatId => logTelegramMessage(user.institute_id, record.student_id || '', record.batch_id, chatId, 'exit', msg, 'sent').catch(console.error))
   }
 
   return NextResponse.json({ success: true, exit_time: formattedTime })

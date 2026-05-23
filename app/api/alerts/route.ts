@@ -26,29 +26,29 @@ export async function POST(req: NextRequest) {
   if (student_id) {
     const { data: student } = await supabaseAdmin
       .from('students')
-      .select('name, parent_telegram_chat_id, batches(name)')
+      .select('name, parent_telegram_chat_id, parent2_telegram_chat_id, batches(name)')
       .eq('id', student_id)
       .eq('institute_id', user.institute_id)
       .single()
 
     if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 })
-    if (!student.parent_telegram_chat_id) {
-      return NextResponse.json({ error: 'Parent Telegram not linked for this student' }, { status: 400 })
+    const studentChatIds = [student.parent_telegram_chat_id, student.parent2_telegram_chat_id].filter(Boolean) as string[]
+    if (studentChatIds.length === 0) {
+      return NextResponse.json({ error: 'No parent Telegram linked for this student' }, { status: 400 })
     }
 
     const batchName = (student.batches as { name?: string })?.name || 'Class'
     const msg = holidayMessage(batchName, message, instituteName)
-    await sendTelegramMessage(student.parent_telegram_chat_id, msg)
-    logTelegramMessage(user.institute_id, student_id, null, student.parent_telegram_chat_id, 'alert', msg, 'sent').catch(console.error)
-    return NextResponse.json({ success: true, message: `Alert sent to ${student.name}'s parent.` })
+    await Promise.all(studentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
+    studentChatIds.forEach(chatId => logTelegramMessage(user.institute_id, student_id, null, chatId, 'alert', msg, 'sent').catch(console.error))
+    return NextResponse.json({ success: true, message: `Alert sent to ${student.name}'s parent(s).` })
   }
 
   // Batch-wise alert (batch_id = null means all batches)
   let studentsQuery = supabaseAdmin
     .from('students')
-    .select('id, name, parent_telegram_chat_id, batches(name)')
+    .select('id, name, parent_telegram_chat_id, parent2_telegram_chat_id, batches(name)')
     .eq('institute_id', user.institute_id)
-    .not('parent_telegram_chat_id', 'is', null)
 
   if (batch_id) studentsQuery = studentsQuery.eq('batch_id', batch_id)
 
@@ -57,13 +57,14 @@ export async function POST(req: NextRequest) {
 
   let sentCount = 0
   for (const student of students || []) {
-    if (!student.parent_telegram_chat_id) continue
+    const chatIds = [student.parent_telegram_chat_id, student.parent2_telegram_chat_id].filter(Boolean) as string[]
+    if (chatIds.length === 0) continue
     const batchName = (student.batches as { name?: string })?.name || 'All Batches'
     const msg = holidayMessage(batchName, message, instituteName)
-    await sendTelegramMessage(student.parent_telegram_chat_id, msg)
-    logTelegramMessage(user.institute_id, student.id, batch_id || null, student.parent_telegram_chat_id, 'alert', msg, 'sent').catch(console.error)
+    await Promise.all(chatIds.map(chatId => sendTelegramMessage(chatId, msg)))
+    chatIds.forEach(chatId => logTelegramMessage(user.institute_id, student.id, batch_id || null, chatId, 'alert', msg, 'sent').catch(console.error))
     sentCount++
   }
 
-  return NextResponse.json({ success: true, message: `Alert sent to ${sentCount} parents.` })
+  return NextResponse.json({ success: true, message: `Alert sent to ${sentCount} students' parents.` })
 }

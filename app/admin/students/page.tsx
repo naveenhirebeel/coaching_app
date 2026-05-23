@@ -5,20 +5,20 @@ import PageHeader from '@/components/PageHeader'
 import AdminBottomNav from '@/components/AdminBottomNav'
 import BottomSheet from '@/components/BottomSheet'
 
-type Student = { id: string; name: string; parent_name: string; parent_telegram_chat_id: string; batch_id: string; batches?: { name: string } }
+type Student = { id: string; name: string; parent_name: string; parent_telegram_chat_id: string; parent2_name: string; parent2_telegram_chat_id: string; batch_id: string; batches?: { name: string } }
 type Batch = { id: string; name: string; subject: string }
 
 export default function StudentsPage() {
   const router = useRouter()
   const [students, setStudents] = useState<Student[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
-  const [form, setForm] = useState({ name: '', parent_name: '', parent_telegram_chat_id: '', batch_id: '' })
+  const [form, setForm] = useState({ name: '', parent_name: '', parent_telegram_chat_id: '', parent2_name: '', parent2_telegram_chat_id: '', batch_id: '' })
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', parent_name: '', parent_telegram_chat_id: '', batch_id: '' })
+  const [editForm, setEditForm] = useState({ name: '', parent_name: '', parent_telegram_chat_id: '', parent2_name: '', parent2_telegram_chat_id: '', batch_id: '' })
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -52,7 +52,7 @@ export default function StudentsPage() {
 
   function startEdit(s: Student) {
     setEditingId(s.id)
-    setEditForm({ name: s.name, parent_name: s.parent_name || '', parent_telegram_chat_id: s.parent_telegram_chat_id || '', batch_id: s.batch_id || '' })
+    setEditForm({ name: s.name, parent_name: s.parent_name || '', parent_telegram_chat_id: s.parent_telegram_chat_id || '', parent2_name: s.parent2_name || '', parent2_telegram_chat_id: s.parent2_telegram_chat_id || '', batch_id: s.batch_id || '' })
     setEditError('')
   }
 
@@ -107,7 +107,7 @@ export default function StudentsPage() {
     const data = await res.json()
     setLoading(false)
     if (!res.ok) return setError(data.error)
-    setForm({ name: '', parent_name: '', parent_telegram_chat_id: '', batch_id: '' })
+    setForm({ name: '', parent_name: '', parent_telegram_chat_id: '', parent2_name: '', parent2_telegram_chat_id: '', batch_id: '' })
     setShowForm(false)
     load()
   }
@@ -145,11 +145,12 @@ export default function StudentsPage() {
                   </button>
                 </div>
               </div>
-              {s.parent_name && <p className="text-sm text-gray-500">Parent: {s.parent_name}</p>}
+              {s.parent_name && <p className="text-sm text-gray-500">Parent 1: {s.parent_name}</p>}
+              {s.parent2_name && <p className="text-sm text-gray-500">Parent 2: {s.parent2_name}</p>}
               {s.batches?.name && <p className="text-xs text-blue-600 mt-1">Batch: {s.batches.name}</p>}
               <div className="flex items-center justify-between mt-1">
-                <p className={`text-xs ${s.parent_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
-                  {s.parent_telegram_chat_id ? 'Telegram alerts active' : 'Parent not linked'}
+                <p className={`text-xs ${s.parent_telegram_chat_id || s.parent2_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
+                  {s.parent_telegram_chat_id || s.parent2_telegram_chat_id ? `Telegram active (${[s.parent_telegram_chat_id, s.parent2_telegram_chat_id].filter(Boolean).length} parent${[s.parent_telegram_chat_id, s.parent2_telegram_chat_id].filter(Boolean).length > 1 ? 's' : ''})` : 'Parents not linked'}
                 </p>
                 {s.parent_telegram_chat_id ? (
                   <button onClick={() => sendTest(s.parent_telegram_chat_id, s.parent_name || s.name, s.id)}
@@ -198,14 +199,21 @@ export default function StudentsPage() {
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Student name"
             value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
-          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent name"
+          <p className="text-xs font-medium text-gray-600 mt-2">Parent 1</p>
+          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 1 name"
             value={form.parent_name} onChange={e => setForm({ ...form, parent_name: e.target.value })} />
           <div>
-            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent Telegram Chat ID"
+            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 1 Telegram Chat ID"
               value={form.parent_telegram_chat_id}
               onChange={e => setForm({ ...form, parent_telegram_chat_id: e.target.value })} />
             <p className="text-xs text-gray-400 mt-1">Parent must message your Telegram bot first to get a Chat ID</p>
           </div>
+          <p className="text-xs font-medium text-gray-600 mt-2">Parent 2 (optional)</p>
+          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 2 name"
+            value={form.parent2_name} onChange={e => setForm({ ...form, parent2_name: e.target.value })} />
+          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 2 Telegram Chat ID"
+            value={form.parent2_telegram_chat_id}
+            onChange={e => setForm({ ...form, parent2_telegram_chat_id: e.target.value })} />
           <select className="w-full border rounded-lg px-3 py-2 text-sm"
             value={form.batch_id} onChange={e => setForm({ ...form, batch_id: e.target.value })} required>
             <option value="">Select Batch</option>
@@ -224,10 +232,16 @@ export default function StudentsPage() {
           {editError && <p className="text-red-600 text-sm">{editError}</p>}
           <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Student name"
             value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} required />
-          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent name"
+          <p className="text-xs font-medium text-gray-600 mt-2">Parent 1</p>
+          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 1 name"
             value={editForm.parent_name} onChange={e => setEditForm({ ...editForm, parent_name: e.target.value })} />
-          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent Telegram Chat ID"
+          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 1 Telegram Chat ID"
             value={editForm.parent_telegram_chat_id} onChange={e => setEditForm({ ...editForm, parent_telegram_chat_id: e.target.value })} />
+          <p className="text-xs font-medium text-gray-600 mt-2">Parent 2 (optional)</p>
+          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 2 name"
+            value={editForm.parent2_name} onChange={e => setEditForm({ ...editForm, parent2_name: e.target.value })} />
+          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 2 Telegram Chat ID"
+            value={editForm.parent2_telegram_chat_id} onChange={e => setEditForm({ ...editForm, parent2_telegram_chat_id: e.target.value })} />
           <select className="w-full border rounded-lg px-3 py-2 text-sm"
             value={editForm.batch_id} onChange={e => setEditForm({ ...editForm, batch_id: e.target.value })} required>
             <option value="">Select Batch</option>

@@ -46,6 +46,8 @@ create table students (
   name text not null,
   parent_name text,
   parent_telegram_chat_id text,
+  parent2_name text,
+  parent2_telegram_chat_id text,
   created_at timestamptz default now()
 );
 

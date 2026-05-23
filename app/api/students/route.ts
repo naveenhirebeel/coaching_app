@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { name, parent_name, parent_telegram_chat_id, batch_id } = await req.json()
+  const { name, parent_name, parent_telegram_chat_id, parent2_name, parent2_telegram_chat_id, batch_id } = await req.json()
 
   if (!name || !batch_id) {
     return NextResponse.json({ error: 'Name and batch are required' }, { status: 400 })
@@ -50,24 +50,23 @@ export async function POST(req: NextRequest) {
 
   const { data: student, error } = await supabaseAdmin
     .from('students')
-    .insert({ name, parent_name, parent_telegram_chat_id, batch_id, institute_id: user.institute_id })
+    .insert({ name, parent_name, parent_telegram_chat_id, parent2_name, parent2_telegram_chat_id, batch_id, institute_id: user.institute_id })
     .select('*, batches(name)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Send welcome Telegram message to parent
-  if (parent_telegram_chat_id) {
+  // Send welcome Telegram message to all linked parents
+  const parentChatIds = [parent_telegram_chat_id, parent2_telegram_chat_id].filter(Boolean)
+  if (parentChatIds.length > 0) {
     const { data: institute } = await supabaseAdmin
       .from('institutes')
       .select('name')
       .eq('id', user.institute_id)
       .single()
 
-    await sendTelegramMessage(
-      parent_telegram_chat_id,
-      welcomeMessage(name, student.batches.name, institute?.name || 'the institute')
-    )
+    const msg = welcomeMessage(name, student.batches.name, institute?.name || 'the institute')
+    await Promise.all(parentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
   }
 
   return NextResponse.json(student)
@@ -77,12 +76,12 @@ export async function PATCH(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, name, parent_name, parent_telegram_chat_id, batch_id } = await req.json()
+  const { id, name, parent_name, parent_telegram_chat_id, parent2_name, parent2_telegram_chat_id, batch_id } = await req.json()
   if (!id || !name || !batch_id) return NextResponse.json({ error: 'ID, name and batch are required' }, { status: 400 })
 
   const { data, error } = await supabaseAdmin
     .from('students')
-    .update({ name, parent_name, parent_telegram_chat_id, batch_id })
+    .update({ name, parent_name, parent_telegram_chat_id, parent2_name, parent2_telegram_chat_id, batch_id })
     .eq('id', id)
     .eq('institute_id', user.institute_id)
     .select('*, batches(name, subject)')
@@ -101,19 +100,18 @@ export async function DELETE(req: NextRequest) {
 
   const { data: student } = await supabaseAdmin
     .from('students')
-    .select('name, parent_telegram_chat_id, institutes(name)')
+    .select('name, parent_telegram_chat_id, parent2_telegram_chat_id, institutes(name)')
     .eq('id', id)
     .eq('institute_id', user.institute_id)
     .single()
 
   if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 })
 
-  if (student.parent_telegram_chat_id) {
+  const parentChatIds = [student.parent_telegram_chat_id, student.parent2_telegram_chat_id].filter(Boolean)
+  if (parentChatIds.length > 0) {
     const instituteName = (student.institutes as { name?: string })?.name || 'the institute'
-    await sendTelegramMessage(
-      student.parent_telegram_chat_id,
-      `ℹ️ <b>${student.name}</b> has been removed from <b>${instituteName}</b>. You will no longer receive attendance alerts for this student.`
-    )
+    const msg = `ℹ️ <b>${student.name}</b> has been removed from <b>${instituteName}</b>. You will no longer receive attendance alerts for this student.`
+    await Promise.all(parentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
   }
 
   const { error } = await supabaseAdmin
