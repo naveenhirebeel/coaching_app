@@ -36,21 +36,24 @@ export async function POST(req: NextRequest) {
   if (text.startsWith('/start')) {
     const param = text.split(/[ =]/)[1] || ''
 
-    if (param.startsWith('p_')) {
-      const studentId = param.slice(2)
+    if (param.startsWith('p_') || param.startsWith('p2_')) {
+      const isParent2 = param.startsWith('p2_')
+      const studentId = param.slice(isParent2 ? 3 : 2)
+      const field = isParent2 ? 'parent2_telegram_chat_id' : 'parent_telegram_chat_id'
+
       const { data: student } = await supabaseAdmin
         .from('students')
-        .select('id, name, parent_name')
+        .select('id, name, parent_name, parent2_name')
         .eq('id', studentId)
         .single()
 
       if (student) {
         const { error: updateError } = await supabaseAdmin
           .from('students')
-          .update({ parent_telegram_chat_id: chatId })
+          .update({ [field]: chatId })
           .eq('id', studentId)
 
-        console.log('[webhook] parent link update', { studentId, chatId, updateError })
+        console.log('[webhook] parent link update', { studentId, chatId, field, updateError })
 
         await sendTelegramMessage(
           chatId,

@@ -37,16 +37,17 @@ export default function StudentsPage() {
     load()
   }
 
-  function getParentLink(studentId: string) {
+  function getParentLink(studentId: string, parent: 1 | 2 = 1) {
     const botUsername = process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
     const base = typeof window !== 'undefined' ? window.location.origin : ''
-    if (botUsername) return `https://t.me/${botUsername}?start=p_${studentId}`
-    return `${base}/api/telegram-webhook?ref=p_${studentId}`
+    const prefix = parent === 2 ? 'p2_' : 'p_'
+    if (botUsername) return `https://t.me/${botUsername}?start=${prefix}${studentId}`
+    return `${base}/api/telegram-webhook?ref=${prefix}${studentId}`
   }
 
-  async function copyParentLink(studentId: string) {
-    await navigator.clipboard.writeText(getParentLink(studentId))
-    setCopiedId(studentId)
+  async function copyParentLink(studentId: string, parent: 1 | 2 = 1) {
+    await navigator.clipboard.writeText(getParentLink(studentId, parent))
+    setCopiedId(parent === 2 ? `${studentId}_p2` : studentId)
     setTimeout(() => setCopiedId(null), 2000)
   }
 
@@ -148,23 +149,43 @@ export default function StudentsPage() {
               {s.parent_name && <p className="text-sm text-gray-500">Parent 1: {s.parent_name}</p>}
               {s.parent2_name && <p className="text-sm text-gray-500">Parent 2: {s.parent2_name}</p>}
               {s.batches?.name && <p className="text-xs text-blue-600 mt-1">Batch: {s.batches.name}</p>}
-              <div className="flex items-center justify-between mt-1">
-                <p className={`text-xs ${s.parent_telegram_chat_id || s.parent2_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
-                  {s.parent_telegram_chat_id || s.parent2_telegram_chat_id ? `Telegram active (${[s.parent_telegram_chat_id, s.parent2_telegram_chat_id].filter(Boolean).length} parent${[s.parent_telegram_chat_id, s.parent2_telegram_chat_id].filter(Boolean).length > 1 ? 's' : ''})` : 'Parents not linked'}
-                </p>
-                {s.parent_telegram_chat_id ? (
-                  <button onClick={() => sendTest(s.parent_telegram_chat_id, s.parent_name || s.name, s.id)}
-                    className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100">
-                    Send Test
-                  </button>
-                ) : (
-                  <button onClick={() => copyParentLink(s.id)}
-                    className="text-xs bg-orange-50 text-orange-600 px-3 py-1 rounded-lg hover:bg-orange-100">
-                    {copiedId === s.id ? 'Copied!' : 'Copy Link'}
-                  </button>
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <p className={`text-xs ${s.parent_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
+                    Parent 1: {s.parent_telegram_chat_id ? 'Telegram linked' : 'Not linked'}
+                  </p>
+                  {s.parent_telegram_chat_id ? (
+                    <button onClick={() => sendTest(s.parent_telegram_chat_id, s.parent_name || s.name, s.id)}
+                      className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100">
+                      Send Test
+                    </button>
+                  ) : (
+                    <button onClick={() => copyParentLink(s.id, 1)}
+                      className="text-xs bg-orange-50 text-orange-600 px-3 py-1 rounded-lg hover:bg-orange-100">
+                      {copiedId === s.id ? 'Copied!' : 'Copy Link'}
+                    </button>
+                  )}
+                </div>
+                {s.parent2_name && (
+                  <div className="flex items-center justify-between">
+                    <p className={`text-xs ${s.parent2_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
+                      Parent 2: {s.parent2_telegram_chat_id ? 'Telegram linked' : 'Not linked'}
+                    </p>
+                    {s.parent2_telegram_chat_id ? (
+                      <button onClick={() => sendTest(s.parent2_telegram_chat_id, s.parent2_name || s.name, `${s.id}_p2`)}
+                        className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100">
+                        Send Test
+                      </button>
+                    ) : (
+                      <button onClick={() => copyParentLink(s.id, 2)}
+                        className="text-xs bg-orange-50 text-orange-600 px-3 py-1 rounded-lg hover:bg-orange-100">
+                        {copiedId === `${s.id}_p2` ? 'Copied!' : 'Copy Link'}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
-              {!s.parent_telegram_chat_id && (
+              {(!s.parent_telegram_chat_id || (s.parent2_name && !s.parent2_telegram_chat_id)) && (
                 <p className="text-xs text-gray-400 mt-1">Share the copied link with the parent. They open it in Telegram to link automatically.</p>
               )}
               {testStatus[s.id] && (
