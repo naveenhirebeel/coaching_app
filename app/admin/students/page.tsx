@@ -90,15 +90,25 @@ export default function StudentsPage() {
     load()
   }
 
-  async function sendTest(chatId: string, name: string, studentId: string) {
-    setTestStatus(prev => ({ ...prev, [studentId]: { ok: false, msg: 'Sending...' } }))
+  async function sendTest(chatId: string, name: string, key: string) {
+    setTestStatus(prev => ({ ...prev, [key]: { ok: false, msg: 'sending' } }))
     const res = await fetch('/api/test-telegram', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
       body: JSON.stringify({ chat_id: chatId, name }),
     })
     const data = await res.json()
-    setTestStatus(prev => ({ ...prev, [studentId]: { ok: res.ok, msg: res.ok ? data.message : data.error } }))
+    const state = res.ok ? 'sent' : 'failed'
+    setTestStatus(prev => ({ ...prev, [key]: { ok: res.ok, msg: state } }))
+    setTimeout(() => setTestStatus(prev => { const n = { ...prev }; delete n[key]; return n }), 3000)
+  }
+
+  function testButtonProps(key: string) {
+    const s = testStatus[key]
+    if (!s) return { label: 'Send Test', className: 'bg-blue-50 text-blue-600 hover:bg-blue-100', disabled: false }
+    if (s.msg === 'sending') return { label: 'Sending…', className: 'bg-gray-100 text-gray-400 cursor-not-allowed', disabled: true }
+    if (s.ok) return { label: '✓ Sent', className: 'bg-green-50 text-green-600 cursor-default', disabled: true }
+    return { label: '✗ Failed', className: 'bg-red-50 text-red-600 cursor-default', disabled: true }
   }
 
   function getToken() { return localStorage.getItem('token') || '' }
@@ -173,12 +183,13 @@ export default function StudentsPage() {
                   <p className={`text-xs ${s.parent_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
                     Parent 1: {s.parent_telegram_chat_id ? 'Telegram linked' : 'Not linked'}
                   </p>
-                  {s.parent_telegram_chat_id ? (
-                    <button onClick={() => sendTest(s.parent_telegram_chat_id, s.parent_name || s.name, s.id)}
-                      className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100">
-                      Send Test
+                  {s.parent_telegram_chat_id ? (() => { const btn = testButtonProps(s.id); return (
+                    <button onClick={() => !btn.disabled && sendTest(s.parent_telegram_chat_id, s.parent_name || s.name, s.id)}
+                      disabled={btn.disabled}
+                      className={`text-xs px-3 py-1 rounded-lg transition-colors ${btn.className}`}>
+                      {btn.label}
                     </button>
-                  ) : (
+                  )})() : (
                     <button onClick={() => copyParentLink(s.id, 1)}
                       className="text-xs bg-orange-50 text-orange-600 px-3 py-1 rounded-lg hover:bg-orange-100">
                       {copiedId === s.id ? 'Copied!' : 'Copy Link'}
@@ -190,12 +201,13 @@ export default function StudentsPage() {
                     <p className={`text-xs ${s.parent2_telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
                       Parent 2: {s.parent2_telegram_chat_id ? 'Telegram linked' : 'Not linked'}
                     </p>
-                    {s.parent2_telegram_chat_id ? (
-                      <button onClick={() => sendTest(s.parent2_telegram_chat_id, s.parent2_name || s.name, `${s.id}_p2`)}
-                        className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-100">
-                        Send Test
+                    {s.parent2_telegram_chat_id ? (() => { const btn = testButtonProps(`${s.id}_p2`); return (
+                      <button onClick={() => !btn.disabled && sendTest(s.parent2_telegram_chat_id, s.parent2_name || s.name, `${s.id}_p2`)}
+                        disabled={btn.disabled}
+                        className={`text-xs px-3 py-1 rounded-lg transition-colors ${btn.className}`}>
+                        {btn.label}
                       </button>
-                    ) : (
+                    )})() : (
                       <button onClick={() => copyParentLink(s.id, 2)}
                         className="text-xs bg-orange-50 text-orange-600 px-3 py-1 rounded-lg hover:bg-orange-100">
                         {copiedId === `${s.id}_p2` ? 'Copied!' : 'Copy Link'}
@@ -206,11 +218,6 @@ export default function StudentsPage() {
               </div>
               {(!s.parent_telegram_chat_id || (s.parent2_name && !s.parent2_telegram_chat_id)) && (
                 <p className="text-xs text-gray-400 mt-1">Share the copied link with the parent. They open it in Telegram to link automatically.</p>
-              )}
-              {testStatus[s.id] && (
-                <p className={`text-xs mt-1 ${testStatus[s.id].ok ? 'text-green-600' : 'text-red-600'}`}>
-                  {testStatus[s.id].msg}
-                </p>
               )}
               {deletingId === s.id && (
                 <div className="mt-3 bg-red-50 rounded-lg p-3 space-y-2">
