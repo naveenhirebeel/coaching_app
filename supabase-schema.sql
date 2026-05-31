@@ -78,6 +78,14 @@ create table activity_logs (
   created_at timestamptz default now()
 );
 
+create table parent_report_requests (
+  id uuid primary key default gen_random_uuid(),
+  chat_id text not null,
+  requested_date date not null,
+  created_at timestamptz default now(),
+  unique(chat_id, requested_date)
+);
+
 create table telegram_message_log (
   id uuid primary key default gen_random_uuid(),
   institute_id uuid not null references institutes(id) on delete cascade,
@@ -114,6 +122,15 @@ create table telegram_message_log (
 
 -- 4. Batch schedule slots (JSONB — multiple day/time slots per batch)
 -- alter table batches add column if not exists schedule_slots jsonb default '[]';
+
+-- 9. Parent report request throttle (once per day per chat ID)
+-- create table if not exists parent_report_requests (
+--   id uuid primary key default gen_random_uuid(),
+--   chat_id text not null,
+--   requested_date date not null,
+--   created_at timestamptz default now(),
+--   unique(chat_id, requested_date)
+-- );
 
 -- 8. Parent mobile number for auto-linking Telegram
 -- alter table students add column if not exists parent_mobile text;

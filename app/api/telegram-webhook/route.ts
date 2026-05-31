@@ -9,6 +9,49 @@ function verifySecret(req: NextRequest) {
   return req.headers.get('x-telegram-bot-api-secret-token') === secret
 }
 
+// Layer 1 — in-memory burst guard: max 5 requests per chatId per minute
+const burstMap = new Map<string, { count: number; windowStart: number }>()
+const BURST_LIMIT = 5
+const BURST_WINDOW_MS = 60_000
+
+function isBurst(chatId: string): boolean {
+  const now = Date.now()
+  const entry = burstMap.get(chatId)
+  if (!entry || now - entry.windowStart > BURST_WINDOW_MS) {
+    burstMap.set(chatId, { count: 1, windowStart: now })
+    return false
+  }
+  entry.count++
+  return entry.count > BURST_LIMIT
+}
+
+// Format last-7-days attendance as a Telegram message
+function formatAttendanceReport(students: { name: string; logs: { date: string; status: string }[] }[]): string {
+  const lines: string[] = ['📊 <b>Attendance Report — Last 7 Days</b>\n']
+  for (const s of students) {
+    const present = s.logs.filter(l => l.status === 'present').length
+    const late = s.logs.filter(l => l.status === 'late').length
+    const absent = s.logs.filter(l => l.status === 'absent').length
+    lines.push(`👤 <b>${s.name}</b>`)
+    if (s.logs.length === 0) {
+      lines.push('  No attendance recorded in last 7 days')
+    } else {
+      const dayLines = s.logs
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map(l => {
+          const icon = l.status === 'present' ? '✅' : l.status === 'late' ? '🕐' : '❌'
+          const d = new Date(l.date)
+          const label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })
+          return `  ${icon} ${label}`
+        })
+      lines.push(...dayLines)
+      lines.push(`  <i>P:${present} L:${late} A:${absent}</i>`)
+    }
+    lines.push('')
+  }
+  return lines.join('\n')
+}
+
 export async function POST(req: NextRequest) {
   if (!verifySecret(req)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -31,6 +74,59 @@ export async function POST(req: NextRequest) {
 
   const chatId = String(message.chat.id)
   const text = message.text.trim()
+
+  // Layer 1 — burst guard (silent drop beyond 5 req/min per chat)
+  if (isBurst(chatId)) return NextResponse.json({ ok: true })
+
+  // --- Handle /report — parent requests last 7 days attendance ---
+  if (text === '/report') {
+    // Find all students linked to this chat ID
+    const { data: linkedStudents } = await supabaseAdmin
+      .from('students')
+      .select('id, name, institute_id')
+      .or(`parent_telegram_chat_id.eq.${chatId},parent2_telegram_chat_id.eq.${chatId}`)
+
+    if (!linkedStudents || linkedStudents.length === 0) {
+      await sendTelegramMessage(chatId, `❌ Your Telegram is not linked to any student. Please use the link shared by your institute.`)
+      return NextResponse.json({ ok: true })
+    }
+
+    // Layer 2 — DB once-per-day check (per parent chat ID)
+    const today = new Date().toISOString().slice(0, 10)
+    const { data: existing } = await supabaseAdmin
+      .from('parent_report_requests')
+      .select('id')
+      .eq('chat_id', chatId)
+      .eq('requested_date', today)
+      .maybeSingle()
+
+    if (existing) {
+      await sendTelegramMessage(chatId, `⏳ You've already requested a report today. Please try again tomorrow.`)
+      return NextResponse.json({ ok: true })
+    }
+
+    // Log this request
+    await supabaseAdmin.from('parent_report_requests').insert({ chat_id: chatId, requested_date: today })
+
+    // Fetch last 7 days attendance for each linked student
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const studentIds = linkedStudents.map(s => s.id)
+
+    const { data: attendance } = await supabaseAdmin
+      .from('attendance')
+      .select('student_id, date, status')
+      .in('student_id', studentIds)
+      .gte('date', sevenDaysAgo)
+      .order('date', { ascending: true })
+
+    const studentsWithLogs = linkedStudents.map(s => ({
+      name: s.name,
+      logs: (attendance || []).filter(a => a.student_id === s.id),
+    }))
+
+    await sendTelegramMessage(chatId, formatAttendanceReport(studentsWithLogs))
+    return NextResponse.json({ ok: true })
+  }
 
   // --- Handle /start with deep link parameter (parent linking) ---
   if (text.startsWith('/start')) {
@@ -147,7 +243,7 @@ export async function POST(req: NextRequest) {
   // --- Unknown message ---
   await sendTelegramMessage(
     chatId,
-    `ℹ️ To link your account, send your registered 10-digit mobile number.\n\nExample: <code>9876543210</code>`
+    `ℹ️ <b>Available commands:</b>\n\n/report — Get last 7 days attendance (once per day)\n\nTo link your account, send your registered 10-digit mobile number.\nExample: <code>9876543210</code>`
   )
 
   return NextResponse.json({ ok: true })
