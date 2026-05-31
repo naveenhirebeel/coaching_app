@@ -45,8 +45,10 @@ create table students (
   batch_id uuid references batches(id) on delete set null,
   name text not null,
   parent_name text,
+  parent_mobile text,
   parent_telegram_chat_id text,
   parent2_name text,
+  parent2_mobile text,
   parent2_telegram_chat_id text,
   created_at timestamptz default now()
 );
@@ -112,6 +114,10 @@ create table telegram_message_log (
 
 -- 4. Batch schedule slots (JSONB — multiple day/time slots per batch)
 -- alter table batches add column if not exists schedule_slots jsonb default '[]';
+
+-- 8. Parent mobile number for auto-linking Telegram
+-- alter table students add column if not exists parent_mobile text;
+-- alter table students add column if not exists parent2_mobile text;
 
 -- 5. Preserve attendance history when batch is deleted (set null instead of cascade)
 -- alter table attendance drop constraint attendance_batch_id_fkey;

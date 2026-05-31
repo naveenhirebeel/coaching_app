@@ -8,6 +8,27 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
+
+  // Mobile lookup: check if a parent mobile is already linked to a Telegram chat ID
+  const checkMobile = searchParams.get('check_mobile')
+  if (checkMobile) {
+    const { data } = await supabaseAdmin
+      .from('students')
+      .select('parent_mobile, parent_telegram_chat_id, parent2_mobile, parent2_telegram_chat_id')
+      .or(`parent_mobile.eq.${checkMobile},parent2_mobile.eq.${checkMobile}`)
+      .not('parent_telegram_chat_id', 'is', null)
+      .limit(1)
+      .maybeSingle()
+
+    if (data) {
+      const chatId = data.parent_mobile === checkMobile
+        ? data.parent_telegram_chat_id
+        : data.parent2_telegram_chat_id
+      return NextResponse.json({ found: true, telegram_chat_id: chatId })
+    }
+    return NextResponse.json({ found: false })
+  }
+
   const batchId = searchParams.get('batch_id')
 
   let instituteId = ('institute_id' in user ? user.institute_id : '') as string
@@ -42,7 +63,7 @@ export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { name, parent_name, parent_telegram_chat_id, parent2_name, parent2_telegram_chat_id, batch_id } = await req.json()
+  const { name, parent_name, parent_mobile, parent_telegram_chat_id, parent2_name, parent2_mobile, parent2_telegram_chat_id, batch_id } = await req.json()
 
   if (!name || !batch_id) {
     return NextResponse.json({ error: 'Name and batch are required' }, { status: 400 })
@@ -50,7 +71,7 @@ export async function POST(req: NextRequest) {
 
   const { data: student, error } = await supabaseAdmin
     .from('students')
-    .insert({ name, parent_name, parent_telegram_chat_id, parent2_name, parent2_telegram_chat_id, batch_id, institute_id: user.institute_id })
+    .insert({ name, parent_name, parent_mobile, parent_telegram_chat_id, parent2_name, parent2_mobile, parent2_telegram_chat_id, batch_id, institute_id: user.institute_id })
     .select('*, batches(name)')
     .single()
 
@@ -76,12 +97,12 @@ export async function PATCH(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, name, parent_name, parent_telegram_chat_id, parent2_name, parent2_telegram_chat_id, batch_id } = await req.json()
+  const { id, name, parent_name, parent_mobile, parent_telegram_chat_id, parent2_name, parent2_mobile, parent2_telegram_chat_id, batch_id } = await req.json()
   if (!id || !name || !batch_id) return NextResponse.json({ error: 'ID, name and batch are required' }, { status: 400 })
 
   const { data, error } = await supabaseAdmin
     .from('students')
-    .update({ name, parent_name, parent_telegram_chat_id, parent2_name, parent2_telegram_chat_id, batch_id })
+    .update({ name, parent_name, parent_mobile, parent_telegram_chat_id, parent2_name, parent2_mobile, parent2_telegram_chat_id, batch_id })
     .eq('id', id)
     .eq('institute_id', user.institute_id)
     .select('*, batches(name, subject)')

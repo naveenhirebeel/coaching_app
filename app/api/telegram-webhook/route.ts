@@ -73,42 +73,73 @@ export async function POST(req: NextRequest) {
     // /start with no param or unknown param — send teacher instructions
     await sendTelegramMessage(
       chatId,
-      `👋 <b>Welcome to CoachingBuddy!</b>\n\nIf you are a <b>teacher</b>, send your registered phone number (digits only) to link your account.\n\nExample: <code>9876543210</code>`
+      `👋 <b>Welcome to CoachingBuddy!</b>\n\nSend your registered 10-digit mobile number to link your account.\n\nExample: <code>9876543210</code>`
     )
     return NextResponse.json({ ok: true })
   }
 
-  // --- Handle phone number (teacher linking) ---
+  // --- Handle phone number (teacher or parent linking) ---
   const phoneMatch = text.match(/^[6-9]\d{9}$/) // Indian 10-digit mobile
   if (phoneMatch) {
     const phone = text
 
+    // Check teacher first
     const { data: teacher } = await supabaseAdmin
       .from('teachers')
       .select('id, name, telegram_chat_id')
       .eq('phone', phone)
       .single()
 
-    if (!teacher) {
+    if (teacher) {
+      await supabaseAdmin
+        .from('teachers')
+        .update({ telegram_chat_id: chatId })
+        .eq('id', teacher.id)
+
       await sendTelegramMessage(
         chatId,
-        `❌ No teacher found with phone number <code>${phone}</code>. Please check with your admin.`
+        `✅ <b>Linked successfully!</b>\n\nHi <b>${teacher.name}</b>, your Telegram is now connected to CoachingBuddy. You will receive OTPs and notifications here.`
       )
       return NextResponse.json({ ok: true })
     }
 
-    if (teacher.telegram_chat_id && teacher.telegram_chat_id !== chatId) {
-      // Already linked to a different chat — update it
+    // Check if this is a registered parent mobile
+    const { data: parentStudents } = await supabaseAdmin
+      .from('students')
+      .select('id, name, parent_mobile, parent2_mobile')
+      .or(`parent_mobile.eq.${phone},parent2_mobile.eq.${phone}`)
+
+    if (parentStudents && parentStudents.length > 0) {
+      // Link all students for this parent
+      const linkedNames: string[] = []
+      const updateTasks: (() => Promise<void>)[] = []
+
+      for (const student of parentStudents) {
+        if (student.parent_mobile === phone) {
+          const id = student.id
+          updateTasks.push(async () => { await supabaseAdmin.from('students').update({ parent_telegram_chat_id: chatId }).eq('id', id) })
+        }
+        if (student.parent2_mobile === phone) {
+          const id = student.id
+          updateTasks.push(async () => { await supabaseAdmin.from('students').update({ parent2_telegram_chat_id: chatId }).eq('id', id) })
+        }
+        linkedNames.push(student.name)
+      }
+
+      await Promise.all(updateTasks.map(t => t()))
+
+      const nameList = linkedNames.map(n => `• ${n}`).join('\n')
+      await sendTelegramMessage(
+        chatId,
+        `✅ <b>Linked successfully!</b>\n\nYou will now receive attendance alerts for:\n${nameList}`
+      )
+      return NextResponse.json({ ok: true })
     }
 
-    await supabaseAdmin
-      .from('teachers')
-      .update({ telegram_chat_id: chatId })
-      .eq('id', teacher.id)
-
+    // No teacher or parent found
     await sendTelegramMessage(
       chatId,
-      `✅ <b>Linked successfully!</b>\n\nHi <b>${teacher.name}</b>, your Telegram is now connected to CoachingBuddy. You will receive OTPs and notifications here.`
+      `❌ No account found with phone number <code>${phone}</code>. Please check with your institute.`
     )
     return NextResponse.json({ ok: true })
   }
@@ -116,7 +147,7 @@ export async function POST(req: NextRequest) {
   // --- Unknown message ---
   await sendTelegramMessage(
     chatId,
-    `ℹ️ To link your account:\n\n• <b>Teachers:</b> Send your 10-digit phone number\n• <b>Parents:</b> Use the link provided by your institute`
+    `ℹ️ To link your account, send your registered 10-digit mobile number.\n\nExample: <code>9876543210</code>`
   )
 
   return NextResponse.json({ ok: true })

@@ -5,25 +5,42 @@ import PageHeader from '@/components/PageHeader'
 import AdminBottomNav from '@/components/AdminBottomNav'
 import BottomSheet from '@/components/BottomSheet'
 
-type Student = { id: string; name: string; parent_name: string; parent_telegram_chat_id: string; parent2_name: string; parent2_telegram_chat_id: string; batch_id: string; batches?: { name: string } }
+type Student = { id: string; name: string; parent_name: string; parent_mobile: string; parent_telegram_chat_id: string; parent2_name: string; parent2_mobile: string; parent2_telegram_chat_id: string; batch_id: string; batches?: { name: string } }
 type Batch = { id: string; name: string; subject: string }
 
 export default function StudentsPage() {
   const router = useRouter()
   const [students, setStudents] = useState<Student[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
-  const [form, setForm] = useState({ name: '', parent_name: '', parent_telegram_chat_id: '', parent2_name: '', parent2_telegram_chat_id: '', batch_id: '' })
+  const [form, setForm] = useState({ name: '', parent_name: '', parent_mobile: '', parent_telegram_chat_id: '', parent2_name: '', parent2_mobile: '', parent2_telegram_chat_id: '', batch_id: '' })
+  const [formMobileStatus, setFormMobileStatus] = useState<{ p1?: 'found' | 'checking'; p2?: 'found' | 'checking' }>({})
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', parent_name: '', parent_telegram_chat_id: '', parent2_name: '', parent2_telegram_chat_id: '', batch_id: '' })
+  const [editForm, setEditForm] = useState({ name: '', parent_name: '', parent_mobile: '', parent_telegram_chat_id: '', parent2_name: '', parent2_mobile: '', parent2_telegram_chat_id: '', batch_id: '' })
+  const [editMobileStatus, setEditMobileStatus] = useState<{ p1?: 'found' | 'checking'; p2?: 'found' | 'checking' }>({})
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  async function checkMobile(mobile: string, parent: 1 | 2, context: 'form' | 'edit') {
+    if (!/^\d{10}$/.test(mobile)) return
+    const setStatus = context === 'form' ? setFormMobileStatus : setEditMobileStatus
+    const setF = context === 'form' ? setForm : setEditForm
+    setStatus(prev => ({ ...prev, [parent === 1 ? 'p1' : 'p2']: 'checking' }))
+    const res = await fetch(`/api/students?check_mobile=${mobile}`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    const data = await res.json()
+    if (data.found) {
+      setF((prev: typeof form) => ({ ...prev, [parent === 1 ? 'parent_telegram_chat_id' : 'parent2_telegram_chat_id']: data.telegram_chat_id }))
+      setStatus(prev => ({ ...prev, [parent === 1 ? 'p1' : 'p2']: 'found' }))
+    } else {
+      setStatus(prev => { const n = { ...prev }; delete n[parent === 1 ? 'p1' : 'p2']; return n })
+    }
+  }
 
   async function handleDelete(id: string) {
     setDeleteLoading(true)
@@ -53,7 +70,8 @@ export default function StudentsPage() {
 
   function startEdit(s: Student) {
     setEditingId(s.id)
-    setEditForm({ name: s.name, parent_name: s.parent_name || '', parent_telegram_chat_id: s.parent_telegram_chat_id || '', parent2_name: s.parent2_name || '', parent2_telegram_chat_id: s.parent2_telegram_chat_id || '', batch_id: s.batch_id || '' })
+    setEditForm({ name: s.name, parent_name: s.parent_name || '', parent_mobile: s.parent_mobile || '', parent_telegram_chat_id: s.parent_telegram_chat_id || '', parent2_name: s.parent2_name || '', parent2_mobile: s.parent2_mobile || '', parent2_telegram_chat_id: s.parent2_telegram_chat_id || '', batch_id: s.batch_id || '' })
+    setEditMobileStatus({})
     setEditError('')
   }
 
@@ -108,7 +126,8 @@ export default function StudentsPage() {
     const data = await res.json()
     setLoading(false)
     if (!res.ok) return setError(data.error)
-    setForm({ name: '', parent_name: '', parent_telegram_chat_id: '', parent2_name: '', parent2_telegram_chat_id: '', batch_id: '' })
+    setForm({ name: '', parent_name: '', parent_mobile: '', parent_telegram_chat_id: '', parent2_name: '', parent2_mobile: '', parent2_telegram_chat_id: '', batch_id: '' })
+    setFormMobileStatus({})
     setShowForm(false)
     load()
   }
@@ -146,8 +165,8 @@ export default function StudentsPage() {
                   </button>
                 </div>
               </div>
-              {s.parent_name && <p className="text-sm text-gray-500">Parent 1: {s.parent_name}</p>}
-              {s.parent2_name && <p className="text-sm text-gray-500">Parent 2: {s.parent2_name}</p>}
+              {s.parent_name && <p className="text-sm text-gray-500">Parent 1: {s.parent_name}{s.parent_mobile ? ` · ${s.parent_mobile}` : ''}</p>}
+              {s.parent2_name && <p className="text-sm text-gray-500">Parent 2: {s.parent2_name}{s.parent2_mobile ? ` · ${s.parent2_mobile}` : ''}</p>}
               {s.batches?.name && <p className="text-xs text-blue-600 mt-1">Batch: {s.batches.name}</p>}
               <div className="mt-2 space-y-1">
                 <div className="flex items-center justify-between">
@@ -224,17 +243,29 @@ export default function StudentsPage() {
           <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 1 name"
             value={form.parent_name} onChange={e => setForm({ ...form, parent_name: e.target.value })} />
           <div>
-            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 1 Telegram Chat ID"
-              value={form.parent_telegram_chat_id}
-              onChange={e => setForm({ ...form, parent_telegram_chat_id: e.target.value })} />
-            <p className="text-xs text-gray-400 mt-1">Parent must message your Telegram bot first to get a Chat ID</p>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 1 mobile (10 digits)"
+              value={form.parent_mobile}
+              onChange={e => { setForm({ ...form, parent_mobile: e.target.value }); setFormMobileStatus(prev => { const n = { ...prev }; delete n.p1; return n }) }}
+              onBlur={e => checkMobile(e.target.value, 1, 'form')}
+              inputMode="numeric" maxLength={10} />
+            {formMobileStatus.p1 === 'checking' && <p className="text-xs text-gray-400 mt-1">Checking...</p>}
+            {formMobileStatus.p1 === 'found' && <p className="text-xs text-green-600 mt-1">✓ Already registered — Telegram linked automatically</p>}
+            {!formMobileStatus.p1 && form.parent_mobile.length === 10 && !form.parent_telegram_chat_id && (
+              <p className="text-xs text-gray-400 mt-1">Parent can also message the bot with their mobile to link</p>
+            )}
           </div>
           <p className="text-xs font-medium text-gray-600 mt-2">Parent 2 (optional)</p>
           <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 2 name"
             value={form.parent2_name} onChange={e => setForm({ ...form, parent2_name: e.target.value })} />
-          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 2 Telegram Chat ID"
-            value={form.parent2_telegram_chat_id}
-            onChange={e => setForm({ ...form, parent2_telegram_chat_id: e.target.value })} />
+          <div>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 2 mobile (10 digits)"
+              value={form.parent2_mobile}
+              onChange={e => { setForm({ ...form, parent2_mobile: e.target.value }); setFormMobileStatus(prev => { const n = { ...prev }; delete n.p2; return n }) }}
+              onBlur={e => checkMobile(e.target.value, 2, 'form')}
+              inputMode="numeric" maxLength={10} />
+            {formMobileStatus.p2 === 'checking' && <p className="text-xs text-gray-400 mt-1">Checking...</p>}
+            {formMobileStatus.p2 === 'found' && <p className="text-xs text-green-600 mt-1">✓ Already registered — Telegram linked automatically</p>}
+          </div>
           <select className="w-full border rounded-lg px-3 py-2 text-sm"
             value={form.batch_id} onChange={e => setForm({ ...form, batch_id: e.target.value })} required>
             <option value="">Select Batch</option>
@@ -256,13 +287,27 @@ export default function StudentsPage() {
           <p className="text-xs font-medium text-gray-600 mt-2">Parent 1</p>
           <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 1 name"
             value={editForm.parent_name} onChange={e => setEditForm({ ...editForm, parent_name: e.target.value })} />
-          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 1 Telegram Chat ID"
-            value={editForm.parent_telegram_chat_id} onChange={e => setEditForm({ ...editForm, parent_telegram_chat_id: e.target.value })} />
+          <div>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 1 mobile (10 digits)"
+              value={editForm.parent_mobile}
+              onChange={e => { setEditForm({ ...editForm, parent_mobile: e.target.value }); setEditMobileStatus(prev => { const n = { ...prev }; delete n.p1; return n }) }}
+              onBlur={e => checkMobile(e.target.value, 1, 'edit')}
+              inputMode="numeric" maxLength={10} />
+            {editMobileStatus.p1 === 'checking' && <p className="text-xs text-gray-400 mt-1">Checking...</p>}
+            {editMobileStatus.p1 === 'found' && <p className="text-xs text-green-600 mt-1">✓ Already registered — Telegram linked automatically</p>}
+          </div>
           <p className="text-xs font-medium text-gray-600 mt-2">Parent 2 (optional)</p>
           <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 2 name"
             value={editForm.parent2_name} onChange={e => setEditForm({ ...editForm, parent2_name: e.target.value })} />
-          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 2 Telegram Chat ID"
-            value={editForm.parent2_telegram_chat_id} onChange={e => setEditForm({ ...editForm, parent2_telegram_chat_id: e.target.value })} />
+          <div>
+            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Parent 2 mobile (10 digits)"
+              value={editForm.parent2_mobile}
+              onChange={e => { setEditForm({ ...editForm, parent2_mobile: e.target.value }); setEditMobileStatus(prev => { const n = { ...prev }; delete n.p2; return n }) }}
+              onBlur={e => checkMobile(e.target.value, 2, 'edit')}
+              inputMode="numeric" maxLength={10} />
+            {editMobileStatus.p2 === 'checking' && <p className="text-xs text-gray-400 mt-1">Checking...</p>}
+            {editMobileStatus.p2 === 'found' && <p className="text-xs text-green-600 mt-1">✓ Already registered — Telegram linked automatically</p>}
+          </div>
           <select className="w-full border rounded-lg px-3 py-2 text-sm"
             value={editForm.batch_id} onChange={e => setEditForm({ ...editForm, batch_id: e.target.value })} required>
             <option value="">Select Batch</option>
