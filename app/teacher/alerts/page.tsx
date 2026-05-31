@@ -3,8 +3,9 @@ import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
 import TeacherBottomNav from '@/components/TeacherBottomNav'
+import { sortBatches, type Slot } from '@/lib/sortBatches'
 
-type Batch = { id: string; name: string; subject: string }
+type Batch = { id: string; name: string; subject: string; schedule_slots?: Slot[] }
 type Student = { id: string; name: string; parent_name: string; batch_id: string; parent_telegram_chat_id: string }
 
 const TEMPLATES = [
@@ -35,7 +36,7 @@ function AlertsContent() {
     const token = getToken()
     fetch('/api/batches', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => { if (r.status === 401) router.push('/teacher/login'); return r.json() })
-      .then(setBatches)
+      .then((data: Batch[]) => setBatches(sortBatches(data)))
     fetch('/api/students', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(setStudents)

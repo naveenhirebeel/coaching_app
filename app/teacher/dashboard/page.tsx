@@ -4,32 +4,16 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PageHeader from '@/components/PageHeader'
 import TeacherBottomNav from '@/components/TeacherBottomNav'
+import { sortBatches, type Slot } from '@/lib/sortBatches'
 
-type Slot = { day: string; start: string; end: string }
 type Batch = { id: string; name: string; subject: string; schedule_slots: Slot[] }
 type AttendanceRow = { batch_id: string; status: string; exit_time: string | null }
-
-const DAY_ORDER = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 function fmt12(t: string) {
   if (!t) return ''
   const [h, m] = t.split(':').map(Number)
   const ampm = h >= 12 ? 'PM' : 'AM'
   return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
-}
-
-function sortBatches(batches: Batch[]): Batch[] {
-  const todayDay = DAY_ORDER[new Date().getDay()]
-  return [...batches].sort((a, b) => {
-    const aSlot = a.schedule_slots?.find(s => s.day === todayDay)
-    const bSlot = b.schedule_slots?.find(s => s.day === todayDay)
-    if (aSlot && !bSlot) return -1
-    if (!aSlot && bSlot) return 1
-    if (aSlot && bSlot) return aSlot.start.localeCompare(bSlot.start)
-    const aFirst = a.schedule_slots?.[0]?.start || '99:99'
-    const bFirst = b.schedule_slots?.[0]?.start || '99:99'
-    return aFirst.localeCompare(bFirst)
-  })
 }
 
 export default function TeacherDashboard() {
