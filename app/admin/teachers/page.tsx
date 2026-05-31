@@ -12,6 +12,7 @@ export default function TeachersPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [form, setForm] = useState({ name: '', phone: '', telegram_chat_id: '' })
   const [showForm, setShowForm] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({})
@@ -72,6 +73,7 @@ export default function TeachersPage() {
     const res = await fetch('/api/teachers', { headers: { Authorization: `Bearer ${getToken()}` } })
     if (res.status === 401) return router.push('/admin/login')
     setTeachers(await res.json())
+    setPageLoading(false)
   }
 
   useEffect(() => { load() }, [])
@@ -162,8 +164,9 @@ export default function TeachersPage() {
               )}
             </div>
           ))}
-          {teachers.length === 0 && (
-            <p className="text-center text-gray-400 py-12">No teachers yet. Add your first teacher.</p>
+          {teachers.length === 0 && (pageLoading
+            ? <p className="text-center text-gray-400 py-12">Loading...</p>
+            : <p className="text-center text-gray-400 py-12">No teachers yet. Add your first teacher.</p>
           )}
         </div>
       </main>

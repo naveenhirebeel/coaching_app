@@ -15,6 +15,7 @@ export default function StudentsPage() {
   const [form, setForm] = useState({ name: '', parent_name: '', parent_mobile: '', parent_telegram_chat_id: '', parent2_name: '', parent2_mobile: '', parent2_telegram_chat_id: '', batch_id: '' })
   const [formMobileStatus, setFormMobileStatus] = useState<{ p1?: 'found' | 'checking'; p2?: 'found' | 'checking' }>({})
   const [showForm, setShowForm] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({})
@@ -121,6 +122,7 @@ export default function StudentsPage() {
     if (sRes.status === 401) return router.push('/admin/login')
     setStudents(await sRes.json())
     setBatches(await bRes.json())
+    setPageLoading(false)
   }
 
   useEffect(() => { load() }, [])
@@ -234,8 +236,9 @@ export default function StudentsPage() {
               )}
             </div>
           ))}
-          {students.length === 0 && (
-            <p className="text-center text-gray-400 py-12">No students yet. Add your first student.</p>
+          {students.length === 0 && (pageLoading
+            ? <p className="text-center text-gray-400 py-12">Loading...</p>
+            : <p className="text-center text-gray-400 py-12">No students yet. Add your first student.</p>
           )}
         </div>
       </main>

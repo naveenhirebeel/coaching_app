@@ -80,6 +80,7 @@ export default function BatchesPage() {
   const [form, setForm] = useState({ name: '', subject: '', teacher_id: '' })
   const [formSlots, setFormSlots] = useState<Slot[]>([])
   const [showForm, setShowForm] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -107,6 +108,7 @@ export default function BatchesPage() {
     const res = await fetch('/api/batches', { headers: { Authorization: `Bearer ${getToken()}` } })
     if (res.status === 401) return router.push('/admin/login')
     setBatches(await res.json())
+    setPageLoading(false)
   }
 
   async function loadTeachers() {
@@ -198,8 +200,9 @@ export default function BatchesPage() {
               </div>
             </div>
           ))}
-          {batches.length === 0 && (
-            <p className="text-center text-gray-400 py-12">No batches yet. Add your first batch.</p>
+          {batches.length === 0 && (pageLoading
+            ? <p className="text-center text-gray-400 py-12">Loading...</p>
+            : <p className="text-center text-gray-400 py-12">No batches yet. Add your first batch.</p>
           )}
         </div>
       </main>
