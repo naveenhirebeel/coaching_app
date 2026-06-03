@@ -86,8 +86,16 @@ export default function AttendanceCorrectionPage() {
     load()
   }
 
-  async function deleteRecord(record: AttendanceRecord) {
+  async function deleteRecord(record: AttendanceRecord, moveExitToId?: string) {
     setActionId(record.id)
+    // If there's an exit time to preserve, move it to another entry first
+    if (moveExitToId && record.exit_time) {
+      await fetch('/api/attendance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ attendance_id: moveExitToId, move_exit: record.exit_time }),
+      })
+    }
     await fetch('/api/attendance', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
@@ -222,27 +230,58 @@ export default function AttendanceCorrectionPage() {
       </main>
 
       {/* Delete confirmation */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-2">Delete Attendance Entry?</h2>
-            <p className="text-sm text-gray-600 mb-1">
-              <span className="font-medium">{confirmDelete.students?.name}</span> — {confirmDelete.status.toUpperCase()}
-            </p>
-            <p className="text-xs text-gray-400 mb-5">Marked at {fmt(confirmDelete.created_at)}. This cannot be undone.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirmDelete(null)}
-                className="flex-1 py-2.5 rounded-xl border text-sm text-gray-600 hover:bg-gray-50">
-                Cancel
-              </button>
-              <button onClick={() => deleteRecord(confirmDelete)} disabled={actionId === confirmDelete.id}
-                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50">
-                {actionId === confirmDelete.id ? 'Deleting...' : 'Delete'}
-              </button>
+      {confirmDelete && (() => {
+        const otherEntries = (byStudent[confirmDelete.student_id]?.records || [])
+          .filter(r => r.id !== confirmDelete.id)
+        const otherEntry = otherEntries[0]
+        const hasExit = !!confirmDelete.exit_time
+        const canMoveExit = hasExit && !!otherEntry
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 mb-1">Delete Attendance Entry?</h2>
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">{confirmDelete.students?.name}</span> — {confirmDelete.status.toUpperCase()}, marked at {fmt(confirmDelete.created_at)}
+                </p>
+              </div>
+
+              {hasExit && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 text-sm text-orange-800 space-y-1">
+                  <p className="font-semibold">⚠️ This entry has an exit time ({fmtExit(confirmDelete.exit_time!)})</p>
+                  {canMoveExit
+                    ? <p className="text-xs">You can move the exit time to the other entry ({otherEntry.status.toUpperCase()}, {fmt(otherEntry.created_at)}) before deleting, so it isn't lost.</p>
+                    : <p className="text-xs">Deleting will permanently remove this exit time — there is no other entry to move it to.</p>
+                  }
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                {canMoveExit && (
+                  <button
+                    onClick={() => deleteRecord(confirmDelete, otherEntry.id)}
+                    disabled={actionId === confirmDelete.id}
+                    className="w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {actionId === confirmDelete.id ? 'Processing...' : `Delete & Move Exit to Other Entry`}
+                  </button>
+                )}
+                <button
+                  onClick={() => deleteRecord(confirmDelete)}
+                  disabled={actionId === confirmDelete.id}
+                  className="w-full py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50"
+                >
+                  {actionId === confirmDelete.id ? 'Deleting...' : hasExit ? 'Delete Entry & Exit Time' : 'Delete Entry'}
+                </button>
+                <button onClick={() => setConfirmDelete(null)}
+                  className="w-full py-2.5 rounded-xl border text-sm text-gray-600 hover:bg-gray-50">
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       <AdminBottomNav />
     </div>

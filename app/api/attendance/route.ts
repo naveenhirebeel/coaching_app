@@ -101,11 +101,12 @@ export async function PATCH(req: NextRequest) {
 
   if (fetchError || !record) return NextResponse.json({ error: 'Record not found' }, { status: 404 })
 
-  // Admin correction: update status and/or clear exit time
-  if (user.role === 'admin' && (body.status || body.clear_exit)) {
+  // Admin correction: update status, clear exit time, or move exit time from another record
+  if (user.role === 'admin' && (body.status || body.clear_exit || body.move_exit)) {
     const updates: Record<string, unknown> = {}
     if (body.status) updates.status = body.status
     if (body.clear_exit) updates.exit_time = null
+    if (body.move_exit) updates.exit_time = body.move_exit
     const { error } = await supabaseAdmin.from('attendance').update(updates).eq('id', attendance_id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })
