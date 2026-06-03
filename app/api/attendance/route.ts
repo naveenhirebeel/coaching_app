@@ -88,17 +88,30 @@ export async function PATCH(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { attendance_id } = await req.json()
+  const body = await req.json()
+  const { attendance_id } = body
   if (!attendance_id) return NextResponse.json({ error: 'attendance_id required' }, { status: 400 })
 
   const { data: record, error: fetchError } = await supabaseAdmin
     .from('attendance')
-    .select('id, exit_time, student_id, batch_id, students(name, parent_telegram_chat_id, parent2_telegram_chat_id), batches(name, institutes(name))')
+    .select('id, exit_time, status, student_id, batch_id, students(name, parent_telegram_chat_id, parent2_telegram_chat_id), batches(name, institutes(name))')
     .eq('id', attendance_id)
     .eq('institute_id', user.institute_id)
     .single()
 
   if (fetchError || !record) return NextResponse.json({ error: 'Record not found' }, { status: 404 })
+
+  // Admin correction: update status and/or clear exit time
+  if (user.role === 'admin' && (body.status || body.clear_exit)) {
+    const updates: Record<string, unknown> = {}
+    if (body.status) updates.status = body.status
+    if (body.clear_exit) updates.exit_time = null
+    const { error } = await supabaseAdmin.from('attendance').update(updates).eq('id', attendance_id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
+  // Teacher: mark exit
   if (record.exit_time) return NextResponse.json({ error: 'Exit already marked' }, { status: 400 })
 
   const exitTime = new Date()
@@ -126,4 +139,21 @@ export async function PATCH(req: NextRequest) {
   }
 
   return NextResponse.json({ success: true, exit_time: formattedTime })
+}
+
+export async function DELETE(req: NextRequest) {
+  const user = getAuthUser(req)
+  if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { attendance_id } = await req.json()
+  if (!attendance_id) return NextResponse.json({ error: 'attendance_id required' }, { status: 400 })
+
+  const { error } = await supabaseAdmin
+    .from('attendance')
+    .delete()
+    .eq('id', attendance_id)
+    .eq('institute_id', user.institute_id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }
