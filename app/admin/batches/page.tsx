@@ -89,6 +89,9 @@ export default function BatchesPage() {
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [notifyBatch, setNotifyBatch] = useState<{ id: string; name: string } | null>(null)
+  const [notifying, setNotifying] = useState(false)
+  const [notifyResult, setNotifyResult] = useState('')
 
   async function handleDelete(id: string) {
     if (!confirm('Delete this batch? This cannot be undone.')) return
@@ -125,6 +128,10 @@ export default function BatchesPage() {
     setEditError('')
   }
 
+  function slotsChanged(original: Slot[], updated: Slot[]) {
+    return JSON.stringify(original) !== JSON.stringify(updated)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true); setError('')
@@ -145,6 +152,9 @@ export default function BatchesPage() {
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault()
     setEditLoading(true); setEditError('')
+    const originalBatch = batches.find(b => b.id === editingId)
+    const originalSlots = originalBatch?.schedule_slots || []
+    const scheduleDidChange = slotsChanged(originalSlots, editSlots)
     const res = await fetch('/api/batches', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
@@ -153,8 +163,27 @@ export default function BatchesPage() {
     const data = await res.json()
     setEditLoading(false)
     if (!res.ok) return setEditError(data.error)
+    const savedId = editingId!
+    const savedName = editForm.name
     setEditingId(null)
     load()
+    if (scheduleDidChange) {
+      setNotifyBatch({ id: savedId, name: savedName })
+      setNotifyResult('')
+    }
+  }
+
+  async function handleNotify() {
+    if (!notifyBatch) return
+    setNotifying(true)
+    const res = await fetch('/api/batches/notify-schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ batch_id: notifyBatch.id }),
+    })
+    const data = await res.json()
+    setNotifying(false)
+    setNotifyResult(data.message || data.error || 'Done')
   }
 
   return (
@@ -258,6 +287,48 @@ export default function BatchesPage() {
           </button>
         </form>
       </BottomSheet>
+
+      {/* Schedule change notification modal */}
+      {notifyBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            {!notifyResult ? (
+              <>
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-2xl">📅</span>
+                  <h2 className="text-base font-semibold text-gray-900">Schedule Changed</h2>
+                </div>
+                <p className="text-sm text-gray-600 mb-5">
+                  The schedule for <span className="font-medium text-gray-900">{notifyBatch.name}</span> was updated.
+                  Would you like to notify all parents in this batch via Telegram?
+                </p>
+                <div className="flex gap-3">
+                  <button onClick={() => setNotifyBatch(null)}
+                    className="flex-1 py-2.5 rounded-xl border text-sm text-gray-600 hover:bg-gray-50">
+                    Skip
+                  </button>
+                  <button onClick={handleNotify} disabled={notifying}
+                    className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+                    {notifying ? 'Sending...' : 'Yes, Notify Parents'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-2xl">✅</span>
+                  <h2 className="text-base font-semibold text-gray-900">Notifications Sent</h2>
+                </div>
+                <p className="text-sm text-gray-600 mb-5">{notifyResult}</p>
+                <button onClick={() => setNotifyBatch(null)}
+                  className="w-full py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
+                  Done
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <AdminBottomNav />
     </div>
