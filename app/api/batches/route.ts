@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('batches')
-    .select('*, teachers(name)')
+    .select('*, teachers(name), students(count)')
     .eq('institute_id', instituteId)
     .order('created_at', { ascending: false })
 
