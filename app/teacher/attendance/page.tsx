@@ -156,10 +156,12 @@ function AttendanceContent() {
           const isSending = sending[s.id]
           const exitTime = exits[s.id]
           const isExiting = exitSending[s.id]
-          const canExit = (currentStatus === 'present' || currentStatus === 'late') && attendanceIds[s.id]
+          // Student is in class and hasn't exited yet — show only Exit button
+          const isInClass = (currentStatus === 'present' || currentStatus === 'late') && !exitTime
 
           return (
             <div key={s.id} className={`bg-white rounded-xl shadow-sm p-4 border-2 transition ${
+              exitTime           ? 'border-gray-200' :
               currentStatus === 'present' ? 'border-green-300' :
               currentStatus === 'late'    ? 'border-yellow-300' :
               currentStatus === 'absent'  ? 'border-red-300' :
@@ -180,43 +182,39 @@ function AttendanceContent() {
                       currentStatus === 'late'    ? 'bg-yellow-100 text-yellow-700' :
                       'bg-red-100 text-red-700'
                     }`}>
-                      {currentStatus.toUpperCase()}
+                      {exitTime ? `${currentStatus.toUpperCase()} · Exited` : currentStatus.toUpperCase()}
                     </span>
                   )}
                 </div>
               </div>
-              <div className="flex gap-2">
-                {(['present', 'late', 'absent'] as MarkedStatus[]).map(status => {
-                  const isActive = currentStatus === status
-                  const isLoading = isSending === status
-                  const style = BTN[status]
-                  return (
-                    <button
-                      key={status}
-                      onClick={() => mark(s.id, status)}
-                      disabled={!!isSending}
-                      className={`flex-1 text-sm py-2.5 rounded-lg font-medium transition disabled:opacity-60 ${
-                        isActive ? style.active : style.inactive
-                      }`}
-                    >
-                      {isLoading ? '...' : style.label}
-                    </button>
-                  )
-                })}
-              </div>
-              {canExit && (
-                <div className="mt-2">
-                  {exitTime ? (
-                    <p className="text-center text-xs text-gray-400 py-1">Exit sent at {exitTime}</p>
-                  ) : (
-                    <button
-                      onClick={() => markExit(s.id)}
-                      disabled={isExiting}
-                      className="w-full text-sm py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition"
-                    >
-                      {isExiting ? 'Sending...' : 'Send Exit Alert'}
-                    </button>
-                  )}
+
+              {isInClass ? (
+                <button
+                  onClick={() => markExit(s.id)}
+                  disabled={isExiting}
+                  className="w-full text-sm py-2.5 rounded-lg bg-gray-700 text-white font-medium hover:bg-gray-800 disabled:opacity-50 transition"
+                >
+                  {isExiting ? 'Sending...' : 'Send Exit Alert'}
+                </button>
+              ) : (
+                <div className="flex gap-2">
+                  {(['present', 'late', 'absent'] as MarkedStatus[]).map(status => {
+                    const isActive = currentStatus === status && !exitTime
+                    const isLoading = isSending === status
+                    const style = BTN[status]
+                    return (
+                      <button
+                        key={status}
+                        onClick={() => mark(s.id, status)}
+                        disabled={!!isSending}
+                        className={`flex-1 text-sm py-2.5 rounded-lg font-medium transition disabled:opacity-60 ${
+                          isActive ? style.active : style.inactive
+                        }`}
+                      >
+                        {isLoading ? '...' : style.label}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>
