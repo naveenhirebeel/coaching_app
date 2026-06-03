@@ -29,6 +29,26 @@ const STATUS_STYLE: Record<string, string> = {
   absent: 'bg-red-100 text-red-700',
 }
 
+const TYPE_LABEL: Record<string, string> = {
+  present: 'Present',
+  absent: 'Absent',
+  late: 'Late',
+  exit: 'Exit',
+  alert: 'Alert',
+  schedule_change: 'Schedule Change',
+  report: 'Report',
+}
+
+const TYPE_STYLE: Record<string, string> = {
+  present: 'bg-green-100 text-green-700',
+  absent: 'bg-red-100 text-red-700',
+  late: 'bg-yellow-100 text-yellow-700',
+  exit: 'bg-gray-100 text-gray-600',
+  alert: 'bg-orange-100 text-orange-700',
+  schedule_change: 'bg-blue-100 text-blue-700',
+  report: 'bg-purple-100 text-purple-700',
+}
+
 function OverviewContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -315,18 +335,26 @@ function OverviewContent() {
                 {/* COMMUNICATIONS */}
                 {tab === 'communications' && !loading && (
                   <>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pb-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pb-2">
                       <select value={commFilters.message_type} onChange={e => setCommFilters({ ...commFilters, message_type: e.target.value })} className="border rounded-lg px-3 py-2 text-sm">
                         <option value="">All Types</option>
-                        <option value="present">Present</option>
-                        <option value="absent">Absent</option>
-                        <option value="late">Late</option>
-                        <option value="exit">Exit</option>
+                        <optgroup label="Attendance">
+                          <option value="present">Present</option>
+                          <option value="absent">Absent</option>
+                          <option value="late">Late</option>
+                          <option value="exit">Exit</option>
+                        </optgroup>
+                        <optgroup label="General">
+                          <option value="alert">Alert / Announcement</option>
+                          <option value="schedule_change">Schedule Change</option>
+                          <option value="report">Attendance Report</option>
+                        </optgroup>
                       </select>
                       <input type="date" value={commFilters.from_date} onChange={e => setCommFilters({ ...commFilters, from_date: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" />
                       <input type="date" value={commFilters.to_date} onChange={e => setCommFilters({ ...commFilters, to_date: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" />
                       <input type="text" placeholder="Search student..." value={commFilters.student_name} onChange={e => setCommFilters({ ...commFilters, student_name: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" />
                     </div>
+                    <p className="text-xs text-gray-400 pb-3">{communications.length} message{communications.length !== 1 ? 's' : ''}</p>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-gray-100">
@@ -341,15 +369,22 @@ function OverviewContent() {
                         </thead>
                         <tbody className="divide-y">
                           {communications.length === 0 ? (
-                            <tr><td colSpan={6} className="text-center text-gray-400 py-8">No messages</td></tr>
+                            <tr><td colSpan={6} className="text-center text-gray-400 py-8">No messages found</td></tr>
                           ) : (
                             communications.map(c => (
                               <>
                                 <tr key={c.id} className="hover:bg-gray-50">
-                                  <td className="px-4 py-2 text-xs text-gray-600 whitespace-nowrap">{fmtTime(c.sent_at)}</td>
+                                  <td className="px-4 py-2 text-xs text-gray-600 whitespace-nowrap">
+                                    <p>{fmt(c.sent_at)}</p>
+                                    <p className="text-gray-400">{fmtTime(c.sent_at)}</p>
+                                  </td>
                                   <td className="px-4 py-2 text-gray-900">{c.student_name}</td>
-                                  <td className="px-4 py-2 text-gray-600">{c.batch_name}</td>
-                                  <td className="px-4 py-2"><span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded capitalize">{c.message_type}</span></td>
+                                  <td className="px-4 py-2 text-gray-600 text-xs">{c.batch_name}</td>
+                                  <td className="px-4 py-2">
+                                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${TYPE_STYLE[c.message_type] || 'bg-gray-100 text-gray-600'}`}>
+                                      {TYPE_LABEL[c.message_type] || c.message_type}
+                                    </span>
+                                  </td>
                                   <td className="px-4 py-2">
                                     <span className={`text-xs px-2 py-1 rounded ${c.status === 'sent' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                       {c.status === 'sent' ? '✓ Sent' : '✗ Failed'}

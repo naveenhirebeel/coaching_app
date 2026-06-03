@@ -15,6 +15,8 @@ export async function GET(req: NextRequest) {
 
   if (!instituteId) return NextResponse.json({ error: 'institute_id required' }, { status: 400 })
 
+  const studentName = searchParams.get('student_name')
+
   let query = supabaseAdmin
     .from('telegram_message_log')
     .select('id, sent_at, student_id, batch_id, recipient_telegram_chat_id, message_type, message_content, status, students(name), batches(name)')
@@ -30,16 +32,19 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const formatted = (data || []).map(msg => ({
-    id: msg.id,
-    sent_at: msg.sent_at,
-    student_name: (msg.students as { name?: string } | null)?.name || 'Unknown',
-    batch_name: (msg.batches as { name?: string } | null)?.name || 'Unknown Batch',
-    recipient_telegram_chat_id: msg.recipient_telegram_chat_id,
-    message_type: msg.message_type,
-    message_content: msg.message_content,
-    status: msg.status,
-  }))
+  const search = studentName?.toLowerCase() || ''
+  const formatted = (data || [])
+    .map(msg => ({
+      id: msg.id,
+      sent_at: msg.sent_at,
+      student_name: (msg.students as { name?: string } | null)?.name || 'Unknown',
+      batch_name: (msg.batches as { name?: string } | null)?.name || '—',
+      recipient_telegram_chat_id: msg.recipient_telegram_chat_id,
+      message_type: msg.message_type,
+      message_content: msg.message_content,
+      status: msg.status,
+    }))
+    .filter(msg => !search || msg.student_name.toLowerCase().includes(search))
 
   return NextResponse.json(formatted)
 }
