@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   const { data: students } = await supabaseAdmin
     .from('students')
-    .select('id, parent_telegram_chat_id, parent2_telegram_chat_id')
+    .select('id, name, parent_telegram_chat_id, parent2_telegram_chat_id')
     .eq('batch_id', batch_id)
     .eq('institute_id', user.institute_id)
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   for (const student of students || []) {
     const chatIds = [student.parent_telegram_chat_id, student.parent2_telegram_chat_id].filter(Boolean) as string[]
     if (chatIds.length === 0) continue
-    const msg = scheduleChangeMessage(batch.name, scheduleText, instituteName)
+    const msg = scheduleChangeMessage(student.name, batch.name, scheduleText, instituteName)
     await Promise.all(chatIds.map(chatId => sendTelegramMessage(chatId, msg)))
     chatIds.forEach(chatId =>
       logTelegramMessage(user.institute_id, student.id, batch_id, chatId, 'schedule_change', msg, 'sent').catch(console.error)

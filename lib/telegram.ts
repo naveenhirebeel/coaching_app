@@ -111,8 +111,10 @@ export function reportMessage(
 ${logLines || 'No records for this period.'}`
 }
 
-export function scheduleChangeMessage(batchName: string, newSchedule: string, instituteName: string) {
+export function scheduleChangeMessage(studentName: string, batchName: string, newSchedule: string, instituteName: string) {
   return `📅 <b>Schedule Update — ${instituteName}</b>
+
+Dear parent of <b>${studentName}</b>,
 
 The schedule for batch <b>${batchName}</b> has been updated.
 

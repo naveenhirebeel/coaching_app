@@ -8,7 +8,7 @@ type Batch = { id: string; name: string; subject: string; schedule_slots: any[];
 type Teacher = { id: string; name: string; phone: string; telegram_chat_id: string | null; created_at: string }
 type Student = { id: string; name: string; parent_name?: string; parent_telegram_chat_id?: string; batch_id?: string; batches?: { name?: string }; created_at: string }
 type Report = { student_id: string; name: string; parent_telegram_chat_id: string | null; present: number; late: number; absent: number; logs: any[] }
-type Communication = { id: string; sent_at: string; student_name: string; batch_name: string; message_type: string; message_content: string; recipient_telegram_chat_id: string; status: string }
+type Communication = { id: string; sent_at: string; student_name: string; batch_name: string; parent_name: string; message_type: string; message_content: string; recipient_telegram_chat_id: string; status: string }
 function fmt(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })
 }
@@ -361,6 +361,7 @@ function OverviewContent() {
                           <tr className="text-left">
                             <th className="px-4 py-2 font-semibold text-gray-700">Time</th>
                             <th className="px-4 py-2 font-semibold text-gray-700">Student</th>
+                            <th className="px-4 py-2 font-semibold text-gray-700">Parent</th>
                             <th className="px-4 py-2 font-semibold text-gray-700">Batch</th>
                             <th className="px-4 py-2 font-semibold text-gray-700">Type</th>
                             <th className="px-4 py-2 font-semibold text-gray-700">Status</th>
@@ -369,7 +370,7 @@ function OverviewContent() {
                         </thead>
                         <tbody className="divide-y">
                           {communications.length === 0 ? (
-                            <tr><td colSpan={6} className="text-center text-gray-400 py-8">No messages found</td></tr>
+                            <tr><td colSpan={7} className="text-center text-gray-400 py-8">No messages found</td></tr>
                           ) : (
                             communications.map(c => (
                               <>
@@ -379,6 +380,7 @@ function OverviewContent() {
                                     <p className="text-gray-400">{fmtTime(c.sent_at)}</p>
                                   </td>
                                   <td className="px-4 py-2 text-gray-900">{c.student_name}</td>
+                                  <td className="px-4 py-2 text-gray-700 text-xs">{c.parent_name}</td>
                                   <td className="px-4 py-2 text-gray-600 text-xs">{c.batch_name}</td>
                                   <td className="px-4 py-2">
                                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${TYPE_STYLE[c.message_type] || 'bg-gray-100 text-gray-600'}`}>
@@ -401,7 +403,13 @@ function OverviewContent() {
                                 </tr>
                                 {commExpanded[c.id] && (
                                   <tr key={`${c.id}-msg`} className="bg-blue-50">
-                                    <td colSpan={6} className="px-6 py-3">
+                                    <td colSpan={7} className="px-6 py-4 space-y-2">
+                                      <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500 mb-2">
+                                        <span><span className="font-medium text-gray-700">Institute:</span> {selectedInstituteName}</span>
+                                        <span><span className="font-medium text-gray-700">Batch:</span> {c.batch_name}</span>
+                                        <span><span className="font-medium text-gray-700">Student:</span> {c.student_name}</span>
+                                        <span><span className="font-medium text-gray-700">Parent:</span> {c.parent_name}</span>
+                                      </div>
                                       <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed border-l-4 border-blue-300 pl-3">
                                         {c.message_content}
                                       </pre>
