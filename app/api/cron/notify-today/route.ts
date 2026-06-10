@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     if (!todaySlot) continue
 
     const classTime = `${fmt12(todaySlot.start)} – ${fmt12(todaySlot.end)}`
-    const instituteName = (batch.institutes as { name: string } | null)?.name || 'Institute'
+    const instituteName = (batch.institutes as unknown as { name: string } | null)?.name || 'Institute'
 
     const { data: students } = await supabaseAdmin
       .from('students')
