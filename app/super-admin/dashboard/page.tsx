@@ -16,6 +16,13 @@ type Institute = {
 
 type Tab = 'pending' | 'approved' | 'revoked' | 'suspended' | 'archived'
 
+type CronStats = {
+  lastRunAt: string | null
+  sent: number
+  failed: number
+  institutes: { name: string; sent: number; failed: number }[]
+}
+
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
   approved: 'Active',
@@ -44,6 +51,8 @@ export default function SuperAdminDashboard() {
   const [reason, setReason] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null)
   const [counts, setCounts] = useState<Record<string, number>>({})
+  const [cronStats, setCronStats] = useState<CronStats | null>(null)
+  const [cronExpanded, setCronExpanded] = useState(false)
 
   async function load(status: Tab) {
     setLoading(true)
@@ -67,7 +76,12 @@ export default function SuperAdminDashboard() {
     setCounts(Object.fromEntries(results))
   }
 
-  useEffect(() => { load(tab); loadCounts() }, [tab])
+  async function loadCronStats() {
+    const res = await fetch('/api/super-admin/cron-stats', { headers: { Authorization: `Bearer ${getToken()}` } })
+    if (res.ok) setCronStats(await res.json())
+  }
+
+  useEffect(() => { load(tab); loadCounts(); loadCronStats() }, [tab])
 
   async function updateStatus(id: string, status: string, statusReason?: string) {
     setActionLoading(id)
@@ -144,6 +158,41 @@ export default function SuperAdminDashboard() {
       </div>
 
       <main className="p-6 max-w-4xl mx-auto space-y-3">
+        {/* Cron Stats Widget */}
+        {cronStats && (
+          <div className="bg-gray-800 rounded-xl p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-indigo-400 text-base">🔔</span>
+                <p className="text-sm font-semibold text-white">Daily Class Reminders</p>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-600 text-white">9 AM IST · Auto</span>
+              </div>
+              <button onClick={() => setCronExpanded(e => !e)} className="text-xs text-gray-400 hover:text-white">
+                {cronExpanded ? 'Hide ▲' : 'Details ▼'}
+              </button>
+            </div>
+            {cronStats.lastRunAt ? (
+              <div className="flex flex-wrap gap-4 text-xs text-gray-300">
+                <span>Last run: <span className="text-white font-medium">{new Date(cronStats.lastRunAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })}</span></span>
+                <span>✅ Sent: <span className="text-green-400 font-medium">{cronStats.sent}</span></span>
+                {cronStats.failed > 0 && <span>❌ Failed: <span className="text-red-400 font-medium">{cronStats.failed}</span></span>}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">No runs yet — cron will fire at 9 AM IST.</p>
+            )}
+            {cronExpanded && cronStats.institutes.length > 0 && (
+              <div className="pt-1 space-y-1 border-t border-gray-700 mt-2">
+                {cronStats.institutes.map(inst => (
+                  <div key={inst.name} className="flex items-center justify-between text-xs text-gray-400">
+                    <span>{inst.name}</span>
+                    <span className="text-green-400">{inst.sent} sent{inst.failed > 0 ? <span className="text-red-400 ml-2">{inst.failed} failed</span> : null}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {loading && <p className="text-gray-400 text-sm text-center py-10">Loading...</p>}
 
         {!loading && institutes.length === 0 && (

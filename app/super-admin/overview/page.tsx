@@ -37,6 +37,7 @@ const TYPE_LABEL: Record<string, string> = {
   alert: 'Alert',
   schedule_change: 'Schedule Change',
   report: 'Report',
+  today_class_reminder: 'Class Reminder',
 }
 
 const TYPE_STYLE: Record<string, string> = {
@@ -47,6 +48,7 @@ const TYPE_STYLE: Record<string, string> = {
   alert: 'bg-orange-100 text-orange-700',
   schedule_change: 'bg-blue-100 text-blue-700',
   report: 'bg-purple-100 text-purple-700',
+  today_class_reminder: 'bg-indigo-100 text-indigo-700',
 }
 
 function OverviewContent() {
@@ -348,6 +350,7 @@ function OverviewContent() {
                           <option value="alert">Alert / Announcement</option>
                           <option value="schedule_change">Schedule Change</option>
                           <option value="report">Attendance Report</option>
+                          <option value="today_class_reminder">Class Reminder (Cron)</option>
                         </optgroup>
                       </select>
                       <input type="date" value={commFilters.from_date} onChange={e => setCommFilters({ ...commFilters, from_date: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" />

@@ -111,6 +111,14 @@ export function reportMessage(
 ${logLines || 'No records for this period.'}`
 }
 
+export function todayClassMessage(studentName: string, batchName: string, classTime: string, instituteName: string) {
+  return `📅 <b>Class Today — ${instituteName}</b>
+
+Hi! Just a reminder that <b>${studentName}</b> has class today.
+📚 Batch: ${batchName}
+🕐 Time: ${classTime}`
+}
+
 export function scheduleChangeMessage(studentName: string, batchName: string, newSchedule: string, instituteName: string) {
   return `📅 <b>Schedule Update — ${instituteName}</b>
 
