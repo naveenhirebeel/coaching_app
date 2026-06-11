@@ -10,11 +10,30 @@ type Batch = { id: string; name: string; subject: string; schedule_slots: Slot[]
 type AttendanceRow = { batch_id: string; status: string; exit_time: string | null }
 type ChangePasswordStep = 'phone' | 'otp' | 'set'
 
+const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
 function fmt12(t: string) {
   if (!t) return ''
   const [h, m] = t.split(':').map(Number)
   const ampm = h >= 12 ? 'PM' : 'AM'
   return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
+}
+
+function isTodayBatch(slots: Slot[]): boolean {
+  const todayDay = DAY_SHORT[new Date().getDay()]
+  return slots?.some(s => s.day === todayDay) ?? false
+}
+
+function isActiveBatch(slots: Slot[]): boolean {
+  const todayDay = DAY_SHORT[new Date().getDay()]
+  const now = new Date()
+  const nowMins = now.getHours() * 60 + now.getMinutes()
+  return slots?.some(s => {
+    if (s.day !== todayDay) return false
+    const [sh, sm] = s.start.split(':').map(Number)
+    const [eh, em] = s.end.split(':').map(Number)
+    return nowMins >= sh * 60 + sm && nowMins <= eh * 60 + em
+  }) ?? false
 }
 
 export default function TeacherDashboard() {
@@ -114,6 +133,13 @@ export default function TeacherDashboard() {
 
   function isAttendanceDone(batchId: string) {
     return todayAttendance.some(r => r.batch_id === batchId)
+  }
+
+  function getAttendanceCounts(batchId: string) {
+    const rows = todayAttendance.filter(r => r.batch_id === batchId)
+    const present = rows.filter(r => r.status === 'present' || r.status === 'late').length
+    const absent = rows.filter(r => r.status === 'absent').length
+    return { present, absent, total: rows.length }
   }
 
   // Change Password modal
@@ -245,11 +271,29 @@ export default function TeacherDashboard() {
           {batches.map(b => {
             const status = getBatchStatus(b.id)
             const attendanceDone = isAttendanceDone(b.id)
+            const todayBatch = isTodayBatch(b.schedule_slots ?? [])
+            const activeBatch = isActiveBatch(b.schedule_slots ?? [])
+            const { present, absent } = getAttendanceCounts(b.id)
+
             return (
-              <div key={b.id} className="bg-white rounded-xl shadow-sm p-4">
+              <div key={b.id} className={`bg-white rounded-xl shadow-sm p-4 border-l-4 ${
+                activeBatch
+                  ? 'border-l-green-500'
+                  : todayBatch
+                  ? 'border-l-amber-400'
+                  : 'border-l-transparent'
+              }`}>
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <p className="font-semibold text-gray-900">{b.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-gray-900">{b.name}</p>
+                      {activeBatch && (
+                        <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                          Active
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-500">{b.subject}</p>
                     {b.schedule_slots?.map((s, i) => (
                       <p key={i} className="text-xs text-gray-400 mt-0.5">{s.day} · {fmt12(s.start)} – {fmt12(s.end)}</p>
@@ -261,6 +305,27 @@ export default function TeacherDashboard() {
                     {attendanceDone ? '✓' : '○'} {status}
                   </span>
                 </div>
+
+                {/* Present / Absent counts — or Pending for active batches */}
+                {todayBatch && (
+                  <div className="flex gap-2 mt-2">
+                    {attendanceDone ? (
+                      <>
+                        <span className="text-xs font-medium bg-green-50 text-green-700 px-2.5 py-1 rounded-full">
+                          ✓ {present} Present
+                        </span>
+                        <span className="text-xs font-medium bg-red-50 text-red-600 px-2.5 py-1 rounded-full">
+                          ✗ {absent} Absent
+                        </span>
+                      </>
+                    ) : activeBatch ? (
+                      <span className="text-xs font-medium bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full">
+                        ⏳ Attendance Pending
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+
                 <div className="flex gap-2 mt-3">
                   <Link
                     href={`/teacher/attendance?batch_id=${b.id}&batch_name=${encodeURIComponent(b.name)}`}
