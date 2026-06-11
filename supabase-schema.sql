@@ -24,6 +24,8 @@ create table teachers (
   institute_id uuid references institutes(id) on delete cascade,
   name text not null,
   phone text not null,
+  email text,
+  password_hash text,
   telegram_chat_id text,
   created_at timestamptz default now()
 );
@@ -122,6 +124,10 @@ create table telegram_message_log (
 
 -- 4. Batch schedule slots (JSONB — multiple day/time slots per batch)
 -- alter table batches add column if not exists schedule_slots jsonb default '[]';
+
+-- 10. Teacher email + password auth
+-- alter table teachers add column if not exists email text;
+-- alter table teachers add column if not exists password_hash text;
 
 -- 9. Parent report request throttle (once per day per chat ID)
 -- create table if not exists parent_report_requests (

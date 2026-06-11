@@ -2,16 +2,48 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { signToken } from '@/lib/auth'
 import { sendTelegramMessage } from '@/lib/telegram'
+import bcrypt from 'bcryptjs'
 
 // In-memory OTP store (use Redis in production)
 const otpStore = new Map<string, { otp: string; expires: number }>()
 
 export async function POST(req: NextRequest) {
   try {
-    const { phone, otp } = await req.json()
+    const body = await req.json()
+    const { phone, otp, email, password } = body
 
+    // ── Email + Password login ──────────────────────────────────────────────
+    if (email && password) {
+      const { data: teacher } = await supabaseAdmin
+        .from('teachers')
+        .select('*, institutes(status)')
+        .eq('email', email)
+        .single()
+
+      if (!teacher || !teacher.password_hash) {
+        return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
+      }
+
+      const instituteStatus = (teacher.institutes as { status: string } | null)?.status
+      if (instituteStatus !== 'approved') {
+        return NextResponse.json({ error: 'Your institute account is not active.' }, { status: 403 })
+      }
+
+      const valid = await bcrypt.compare(password, teacher.password_hash)
+      if (!valid) {
+        return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
+      }
+
+      const token = signToken({ id: teacher.id, role: 'teacher', institute_id: teacher.institute_id })
+      return NextResponse.json({
+        token,
+        teacher: { id: teacher.id, name: teacher.name, institute_id: teacher.institute_id },
+      })
+    }
+
+    // ── OTP login ───────────────────────────────────────────────────────────
     if (!phone) {
-      return NextResponse.json({ error: 'Phone is required' }, { status: 400 })
+      return NextResponse.json({ error: 'Phone or email is required' }, { status: 400 })
     }
 
     // Step 1: Send OTP

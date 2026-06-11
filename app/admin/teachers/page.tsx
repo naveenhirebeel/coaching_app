@@ -5,19 +5,19 @@ import PageHeader from '@/components/PageHeader'
 import AdminBottomNav from '@/components/AdminBottomNav'
 import BottomSheet from '@/components/BottomSheet'
 
-type Teacher = { id: string; name: string; phone: string; telegram_chat_id: string }
+type Teacher = { id: string; name: string; phone: string; email: string; telegram_chat_id: string }
 
 export default function TeachersPage() {
   const router = useRouter()
   const [teachers, setTeachers] = useState<Teacher[]>([])
-  const [form, setForm] = useState({ name: '', phone: '', telegram_chat_id: '' })
+  const [form, setForm] = useState({ name: '', phone: '', email: '', telegram_chat_id: '' })
   const [showForm, setShowForm] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string }>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', phone: '', telegram_chat_id: '' })
+  const [editForm, setEditForm] = useState({ name: '', phone: '', email: '', telegram_chat_id: '' })
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -37,7 +37,7 @@ export default function TeachersPage() {
 
   function startEdit(t: Teacher) {
     setEditingId(t.id)
-    setEditForm({ name: t.name, phone: t.phone, telegram_chat_id: t.telegram_chat_id || '' })
+    setEditForm({ name: t.name, phone: t.phone, email: t.email || '', telegram_chat_id: t.telegram_chat_id || '' })
     setEditError('')
   }
 
@@ -89,7 +89,7 @@ export default function TeachersPage() {
     const data = await res.json()
     setLoading(false)
     if (!res.ok) return setError(data.error)
-    setForm({ name: '', phone: '', telegram_chat_id: '' })
+    setForm({ name: '', phone: '', email: '', telegram_chat_id: '' })
     setShowForm(false)
     load()
   }
@@ -128,6 +128,7 @@ export default function TeachersPage() {
                 </div>
               </div>
               <p className="text-sm text-gray-500">{t.phone}</p>
+              {t.email && <p className="text-sm text-gray-400">{t.email}</p>}
               <div className="flex items-center justify-between mt-1">
                 <p className={`text-xs ${t.telegram_chat_id ? 'text-green-600' : 'text-orange-500'}`}>
                   {t.telegram_chat_id ? 'Telegram connected' : 'Telegram not linked'}
@@ -179,6 +180,8 @@ export default function TeachersPage() {
             value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
           <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Phone number"
             value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} required />
+          <input type="email" className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Email address (optional)"
+            value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
           <div className="bg-blue-50 rounded-lg px-3 py-2 text-xs text-blue-700">
             No Chat ID needed. After saving, ask the teacher to open your Telegram bot and send their phone number (e.g. <span className="font-mono">9876543210</span>). They will be linked automatically.
           </div>
@@ -197,6 +200,8 @@ export default function TeachersPage() {
             value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} required />
           <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Phone number"
             value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} required />
+          <input type="email" className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Email address (optional)"
+            value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} />
           <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Telegram Chat ID"
             value={editForm.telegram_chat_id} onChange={e => setEditForm({ ...editForm, telegram_chat_id: e.target.value })} />
           <button type="submit" disabled={editLoading}
