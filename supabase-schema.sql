@@ -94,7 +94,7 @@ create table telegram_message_log (
   student_id uuid not null references students(id) on delete cascade,
   batch_id uuid references batches(id) on delete set null,
   recipient_telegram_chat_id text not null, -- parent's chat ID
-  message_type text not null check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report')),
+  message_type text not null check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report', 'today_class_reminder')),
   message_content text not null,
   status text not null default 'sent' check (status in ('sent', 'failed')),
   sent_at timestamptz default now(),
@@ -164,7 +164,7 @@ create table telegram_message_log (
 -- 8. Extend telegram_message_log to allow schedule_change and report message types
 -- alter table telegram_message_log drop constraint if exists telegram_message_log_message_type_check;
 -- alter table telegram_message_log add constraint telegram_message_log_message_type_check
---   check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report'));
+--   check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report', 'today_class_reminder'));
 
 -- 7. Create telegram_message_log table (communications tracking)
 -- create table if not exists telegram_message_log (
@@ -173,7 +173,7 @@ create table telegram_message_log (
 --   student_id uuid not null references students(id) on delete cascade,
 --   batch_id uuid references batches(id) on delete set null,
 --   recipient_telegram_chat_id text not null,
---   message_type text not null check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report')),
+--   message_type text not null check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report', 'today_class_reminder')),
 --   message_content text not null,
 --   status text not null default 'sent' check (status in ('sent', 'failed')),
 --   sent_at timestamptz default now(),
