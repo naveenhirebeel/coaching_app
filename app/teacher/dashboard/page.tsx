@@ -6,7 +6,7 @@ import PageHeader from '@/components/PageHeader'
 import TeacherBottomNav from '@/components/TeacherBottomNav'
 import { sortBatches, type Slot } from '@/lib/sortBatches'
 
-type Batch = { id: string; name: string; subject: string; schedule_slots: Slot[] }
+type Batch = { id: string; name: string; subject: string; schedule_slots: Slot[]; students: { count: number }[] }
 type AttendanceRow = { batch_id: string; status: string; exit_time: string | null }
 type ChangePasswordStep = 'phone' | 'otp' | 'set'
 
@@ -34,6 +34,22 @@ function isActiveBatch(slots: Slot[]): boolean {
     const [eh, em] = s.end.split(':').map(Number)
     return nowMins >= sh * 60 + sm && nowMins <= eh * 60 + em
   }) ?? false
+}
+
+function batchPriority(
+  slots: Slot[],
+  rows: AttendanceRow[]
+): number {
+  const isToday = isTodayBatch(slots)
+  const isActive = isActiveBatch(slots)
+  const present = rows.filter(r => r.status === 'present' || r.status === 'late')
+  const stillInClass = present.filter(r => !r.exit_time).length
+  const isCompleted = rows.length > 0 && present.length > 0 && stillInClass === 0
+
+  if (isActive) return 0
+  if (isToday && !isCompleted) return 1
+  if (!isToday) return 2
+  return 3 // completed today
 }
 
 export default function TeacherDashboard() {
@@ -141,6 +157,20 @@ export default function TeacherDashboard() {
     const absent = rows.filter(r => r.status === 'absent').length
     return { present, absent, total: rows.length }
   }
+
+  function isCompletedBatch(batchId: string): boolean {
+    const rows = todayAttendance.filter(r => r.batch_id === batchId)
+    if (rows.length === 0) return false
+    const present = rows.filter(r => r.status === 'present' || r.status === 'late')
+    if (present.length === 0) return false
+    return present.every(r => !!r.exit_time)
+  }
+
+  const sortedBatches = [...batches].sort((a, b) => {
+    const aRows = todayAttendance.filter(r => r.batch_id === a.id)
+    const bRows = todayAttendance.filter(r => r.batch_id === b.id)
+    return batchPriority(a.schedule_slots ?? [], aRows) - batchPriority(b.schedule_slots ?? [], bRows)
+  })
 
   // Change Password modal
   if (showChangePw) {
@@ -268,53 +298,70 @@ export default function TeacherDashboard() {
         </div>
 
         <div className="space-y-3">
-          {batches.map(b => {
+          {sortedBatches.map(b => {
             const status = getBatchStatus(b.id)
             const attendanceDone = isAttendanceDone(b.id)
             const todayBatch = isTodayBatch(b.schedule_slots ?? [])
             const activeBatch = isActiveBatch(b.schedule_slots ?? [])
+            const completed = isCompletedBatch(b.id)
             const { present, absent } = getAttendanceCounts(b.id)
 
             return (
-              <div key={b.id} className={`bg-white rounded-xl shadow-sm p-4 border-l-4 ${
-                activeBatch
-                  ? 'border-l-green-500'
+              <div key={b.id} className={`rounded-xl shadow-sm p-4 border-l-4 ${
+                completed
+                  ? 'bg-gray-50 border-l-gray-300'
+                  : activeBatch
+                  ? 'bg-white border-l-green-500'
                   : todayBatch
-                  ? 'border-l-amber-400'
-                  : 'border-l-transparent'
+                  ? 'bg-white border-l-amber-400'
+                  : 'bg-white border-l-transparent'
               }`}>
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-900">{b.name}</p>
-                      {activeBatch && (
+                      <p className={`font-semibold ${completed ? 'text-gray-400' : 'text-gray-900'}`}>{b.name}</p>
+                      {completed && (
+                        <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                          ✓ Completed
+                        </span>
+                      )}
+                      {activeBatch && !completed && (
                         <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
                           Active
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-500">{b.subject}</p>
+                    <p className={`text-sm ${completed ? 'text-gray-400' : 'text-gray-500'}`}>{b.subject}</p>
                     {b.schedule_slots?.map((s, i) => (
                       <p key={i} className="text-xs text-gray-400 mt-0.5">{s.day} · {fmt12(s.start)} – {fmt12(s.end)}</p>
                     ))}
+                    <p className={`text-xs font-semibold mt-1.5 ${completed ? 'text-gray-400' : 'text-blue-600'}`}>
+                      👥 {b.students?.[0]?.count ?? 0} Students
+                    </p>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ml-2 shrink-0 ${
-                    attendanceDone ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {attendanceDone ? '✓' : '○'} {status}
-                  </span>
+                  {!completed && (
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ml-2 shrink-0 ${
+                      attendanceDone ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {attendanceDone ? '✓' : '○'} {status}
+                    </span>
+                  )}
                 </div>
 
-                {/* Present / Absent counts — or Pending for active batches */}
+                {/* Present / Absent counts */}
                 {todayBatch && (
                   <div className="flex gap-2 mt-2">
                     {attendanceDone ? (
                       <>
-                        <span className="text-xs font-medium bg-green-50 text-green-700 px-2.5 py-1 rounded-full">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                          completed ? 'bg-gray-100 text-gray-400' : 'bg-green-50 text-green-700'
+                        }`}>
                           ✓ {present} Present
                         </span>
-                        <span className="text-xs font-medium bg-red-50 text-red-600 px-2.5 py-1 rounded-full">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                          completed ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-600'
+                        }`}>
                           ✗ {absent} Absent
                         </span>
                       </>
@@ -329,7 +376,11 @@ export default function TeacherDashboard() {
                 <div className="flex gap-2 mt-3">
                   <Link
                     href={`/teacher/attendance?batch_id=${b.id}&batch_name=${encodeURIComponent(b.name)}`}
-                    className="flex-1 text-center bg-green-600 text-white text-sm py-2 rounded-lg hover:bg-green-700"
+                    className={`flex-1 text-center text-sm py-2 rounded-lg ${
+                      completed
+                        ? 'bg-gray-100 text-gray-400'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
                   >
                     Mark
                   </Link>
