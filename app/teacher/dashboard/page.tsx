@@ -6,7 +6,8 @@ import PageHeader from '@/components/PageHeader'
 import TeacherBottomNav from '@/components/TeacherBottomNav'
 import { sortBatches, type Slot } from '@/lib/sortBatches'
 
-type Batch = { id: string; name: string; subject: string; schedule_slots: Slot[]; students: { count: number }[] }
+type Student = { id: string; name: string }
+type Batch = { id: string; name: string; subject: string; schedule_slots: Slot[]; students: Student[] }
 type AttendanceRow = { batch_id: string; status: string; exit_time: string | null }
 type ChangePasswordStep = 'phone' | 'otp' | 'set'
 
@@ -57,6 +58,7 @@ export default function TeacherDashboard() {
   const [batches, setBatches] = useState<Batch[]>([])
   const [teacher, setTeacher] = useState<{ name: string } | null>(null)
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRow[]>([])
+  const [expandedBatch, setExpandedBatch] = useState<string | null>(null)
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
 
   // Change password state
@@ -336,9 +338,23 @@ export default function TeacherDashboard() {
                     {b.schedule_slots?.map((s, i) => (
                       <p key={i} className="text-xs text-gray-400 mt-0.5">{s.day} · {fmt12(s.start)} – {fmt12(s.end)}</p>
                     ))}
-                    <p className={`text-xs font-semibold mt-1.5 ${completed ? 'text-gray-400' : 'text-blue-600'}`}>
-                      👥 {b.students?.[0]?.count ?? 0} Students
-                    </p>
+                    <button
+                      onClick={() => setExpandedBatch(expandedBatch === b.id ? null : b.id)}
+                      className={`text-xs font-semibold mt-1.5 ${completed ? 'text-gray-400' : 'text-blue-600'} flex items-center gap-1`}
+                    >
+                      👥 {b.students?.length ?? 0} Students
+                      <span className="text-gray-400">{expandedBatch === b.id ? '▲' : '▼'}</span>
+                    </button>
+                    {expandedBatch === b.id && (
+                      <ul className="mt-2 space-y-1">
+                        {b.students?.map(s => (
+                          <li key={s.id} className="text-xs text-gray-600 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block shrink-0" />
+                            {s.name}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                   {!completed && (
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ml-2 shrink-0 ${
