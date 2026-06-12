@@ -36,25 +36,30 @@ function SlotBuilder({ slots, onChange }: { slots: Slot[]; onChange: (s: Slot[])
         <p className="text-xs text-gray-400">No slots yet. Add at least one.</p>
       )}
       {slots.map((s, i) => (
-        <div key={i} className="bg-gray-50 rounded-lg px-3 py-2 space-y-2">
+        <div key={i} className="bg-gray-50 rounded-lg px-3 py-2.5 space-y-2.5">
           <div className="flex items-center gap-2">
             <select value={s.day} onChange={e => update(i, 'day', e.target.value)}
-              className="flex-1 border rounded px-2 py-1.5 text-sm">
+              className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white">
               {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
             <button type="button" onClick={() => remove(i)}
-              className="text-gray-400 hover:text-red-500 p-1">
+              className="shrink-0 text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition">
               <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <div className="flex items-center gap-2">
-            <input type="time" value={s.start} onChange={e => update(i, 'start', e.target.value)}
-              className="flex-1 border rounded px-2 py-1.5 text-sm" />
-            <span className="text-gray-400 text-xs shrink-0">to</span>
-            <input type="time" value={s.end} onChange={e => update(i, 'end', e.target.value)}
-              className="flex-1 border rounded px-2 py-1.5 text-sm" />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <p className="text-xs text-gray-400 pl-0.5">Start</p>
+              <input type="time" value={s.start} onChange={e => update(i, 'start', e.target.value)}
+                className="w-full border rounded-lg px-2 py-2 text-sm bg-white" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-gray-400 pl-0.5">End</p>
+              <input type="time" value={s.end} onChange={e => update(i, 'end', e.target.value)}
+                className="w-full border rounded-lg px-2 py-2 text-sm bg-white" />
+            </div>
           </div>
         </div>
       ))}
@@ -202,10 +207,10 @@ export default function BatchesPage() {
         <div className="space-y-3">
           {batches.map(b => (
             <div key={b.id} className="bg-white rounded-xl shadow-sm p-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-semibold text-gray-900">{b.name}</p>
-                  <p className="text-sm text-gray-500">{b.subject}</p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-gray-900 truncate">{b.name}</p>
+                  <p className="text-sm text-gray-500 truncate">{b.subject}</p>
                   <SlotDisplay slots={b.schedule_slots} />
                   <div className="flex items-center gap-3 mt-1">
                     {b.teachers?.name && <p className="text-xs text-blue-600">Teacher: {b.teachers.name}</p>}

@@ -49,7 +49,7 @@ export default function BottomSheet({ open, onClose, title, children }: Props) {
           </button>
         </div>
         {/* Scrollable body */}
-        <div className="overflow-y-auto px-4 py-4 flex-1 pb-safe">
+        <div className="overflow-y-auto px-4 py-4 flex-1" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
           {children}
         </div>
       </div>
