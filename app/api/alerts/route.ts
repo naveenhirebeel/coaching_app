@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser } from '@/lib/auth'
-import { sendTelegramMessage, holidayMessage, logTelegramMessage } from '@/lib/telegram'
+import { holidayMessage, sendTrackedMessage } from '@/lib/telegram'
 
 export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
@@ -39,8 +39,7 @@ export async function POST(req: NextRequest) {
 
     const batchName = (student.batches as { name?: string })?.name || 'Class'
     const msg = holidayMessage(batchName, message, instituteName)
-    await Promise.all(studentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
-    studentChatIds.forEach(chatId => logTelegramMessage(user.institute_id, student_id, null, chatId, 'alert', msg, 'sent').catch(console.error))
+    await Promise.all(studentChatIds.map(chatId => sendTrackedMessage({ instituteId: user.institute_id, studentId: student_id, batchId: null, chatId, messageType: 'alert', message: msg, withAck: true })))
     return NextResponse.json({ success: true, message: `Alert sent to ${student.name}'s parent(s).` })
   }
 
@@ -61,8 +60,7 @@ export async function POST(req: NextRequest) {
     if (chatIds.length === 0) continue
     const batchName = (student.batches as { name?: string })?.name || 'All Batches'
     const msg = holidayMessage(batchName, message, instituteName)
-    await Promise.all(chatIds.map(chatId => sendTelegramMessage(chatId, msg)))
-    chatIds.forEach(chatId => logTelegramMessage(user.institute_id, student.id, batch_id || null, chatId, 'alert', msg, 'sent').catch(console.error))
+    await Promise.all(chatIds.map(chatId => sendTrackedMessage({ instituteId: user.institute_id, studentId: student.id, batchId: batch_id || null, chatId, messageType: 'alert', message: msg, withAck: true })))
     sentCount++
   }
 

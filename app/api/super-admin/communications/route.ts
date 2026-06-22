@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabaseAdmin
     .from('telegram_message_log')
-    .select('id, sent_at, student_id, batch_id, recipient_telegram_chat_id, message_type, message_content, status, students(name, parent_name, parent_telegram_chat_id, parent2_name, parent2_telegram_chat_id), batches(name)')
+    .select('id, sent_at, student_id, batch_id, recipient_telegram_chat_id, message_type, message_content, status, acknowledged_at, students(name, parent_name, parent_telegram_chat_id, parent2_name, parent2_telegram_chat_id), batches(name)')
     .eq('institute_id', instituteId)
     .order('sent_at', { ascending: false })
 
@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
         message_type: msg.message_type,
         message_content: msg.message_content,
         status: msg.status,
+        acknowledged_at: msg.acknowledged_at,
       }
     })
     .filter(msg => !search || msg.student_name.toLowerCase().includes(search))

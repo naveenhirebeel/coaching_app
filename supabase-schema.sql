@@ -96,7 +96,10 @@ create table telegram_message_log (
   recipient_telegram_chat_id text not null, -- parent's chat ID
   message_type text not null check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report', 'today_class_reminder')),
   message_content text not null,
-  status text not null default 'sent' check (status in ('sent', 'failed')),
+  status text not null default 'sent' check (status in ('sent', 'delivered', 'blocked', 'failed', 'pending')),
+  telegram_message_id bigint, -- id returned by Telegram on delivery (used to edit/correlate)
+  acknowledged_at timestamptz, -- set when parent taps the "👍 Got it" button
+  acknowledged_by_chat_id text,
   sent_at timestamptz default now(),
   created_at timestamptz default now()
 );
@@ -166,6 +169,14 @@ create table telegram_message_log (
 -- alter table telegram_message_log add constraint telegram_message_log_message_type_check
 --   check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report', 'today_class_reminder'));
 
+-- 11. Delivery flow: granular send status + parent acknowledgment tracking
+-- alter table telegram_message_log drop constraint if exists telegram_message_log_status_check;
+-- alter table telegram_message_log add constraint telegram_message_log_status_check
+--   check (status in ('sent', 'delivered', 'blocked', 'failed', 'pending'));
+-- alter table telegram_message_log add column if not exists telegram_message_id bigint;
+-- alter table telegram_message_log add column if not exists acknowledged_at timestamptz;
+-- alter table telegram_message_log add column if not exists acknowledged_by_chat_id text;
+
 -- 7. Create telegram_message_log table (communications tracking)
 -- create table if not exists telegram_message_log (
 --   id uuid primary key default gen_random_uuid(),
@@ -175,7 +186,10 @@ create table telegram_message_log (
 --   recipient_telegram_chat_id text not null,
 --   message_type text not null check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report', 'today_class_reminder')),
 --   message_content text not null,
---   status text not null default 'sent' check (status in ('sent', 'failed')),
+--   status text not null default 'sent' check (status in ('sent', 'delivered', 'blocked', 'failed', 'pending')),
+--   telegram_message_id bigint,
+--   acknowledged_at timestamptz,
+--   acknowledged_by_chat_id text,
 --   sent_at timestamptz default now(),
 --   created_at timestamptz default now()
 -- );

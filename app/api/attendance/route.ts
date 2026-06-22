@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser } from '@/lib/auth'
-import { sendTelegramMessage, absentMessage, presentMessage, lateMessage, exitMessage, logTelegramMessage } from '@/lib/telegram'
+import { absentMessage, presentMessage, lateMessage, exitMessage, sendTrackedMessage } from '@/lib/telegram'
 
 export async function GET(req: NextRequest) {
   const user = getAuthUser(req)
@@ -65,18 +65,15 @@ export async function POST(req: NextRequest) {
   if (student && parentChatIds.length > 0) {
     if (status === 'absent') {
       const msg = absentMessage(student.name, batchName, formattedDate, instituteName, institutePhone)
-      await Promise.all(parentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
-      parentChatIds.forEach(chatId => logTelegramMessage(user.institute_id, student_id, batch_id, chatId, 'absent', msg, 'sent').catch(console.error))
+      await Promise.all(parentChatIds.map(chatId => sendTrackedMessage({ instituteId: user.institute_id, studentId: student_id, batchId: batch_id, chatId, messageType: 'absent', message: msg, withAck: true })))
       notified = true
     } else if (status === 'late') {
       const msg = lateMessage(student.name, batchName, formattedDate, instituteName, institutePhone)
-      await Promise.all(parentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
-      parentChatIds.forEach(chatId => logTelegramMessage(user.institute_id, student_id, batch_id, chatId, 'late', msg, 'sent').catch(console.error))
+      await Promise.all(parentChatIds.map(chatId => sendTrackedMessage({ instituteId: user.institute_id, studentId: student_id, batchId: batch_id, chatId, messageType: 'late', message: msg })))
       notified = true
     } else if (status === 'present' && notify_present) {
       const msg = presentMessage(student.name, batchName, formattedDate, instituteName)
-      await Promise.all(parentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
-      parentChatIds.forEach(chatId => logTelegramMessage(user.institute_id, student_id, batch_id, chatId, 'present', msg, 'sent').catch(console.error))
+      await Promise.all(parentChatIds.map(chatId => sendTrackedMessage({ instituteId: user.institute_id, studentId: student_id, batchId: batch_id, chatId, messageType: 'present', message: msg })))
       notified = true
     }
   }
@@ -135,8 +132,7 @@ export async function PATCH(req: NextRequest) {
   const exitParentChatIds = [student?.parent_telegram_chat_id, student?.parent2_telegram_chat_id].filter(Boolean) as string[]
   if (student && exitParentChatIds.length > 0) {
     const msg = exitMessage(student.name, batchName, formattedTime, instituteName)
-    await Promise.all(exitParentChatIds.map(chatId => sendTelegramMessage(chatId, msg)))
-    exitParentChatIds.forEach(chatId => logTelegramMessage(user.institute_id, record.student_id || '', record.batch_id, chatId, 'exit', msg, 'sent').catch(console.error))
+    await Promise.all(exitParentChatIds.map(chatId => sendTrackedMessage({ instituteId: user.institute_id, studentId: record.student_id || '', batchId: record.batch_id, chatId, messageType: 'exit', message: msg })))
   }
 
   return NextResponse.json({ success: true, exit_time: formattedTime })

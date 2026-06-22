@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser } from '@/lib/auth'
-import { sendTelegramMessage, scheduleChangeMessage, logTelegramMessage } from '@/lib/telegram'
+import { scheduleChangeMessage, sendTrackedMessage } from '@/lib/telegram'
 
 function fmt12(t: string) {
   if (!t) return ''
@@ -50,10 +50,7 @@ export async function POST(req: NextRequest) {
     const chatIds = [student.parent_telegram_chat_id, student.parent2_telegram_chat_id].filter(Boolean) as string[]
     if (chatIds.length === 0) continue
     const msg = scheduleChangeMessage(student.name, batch.name, scheduleText, instituteName)
-    await Promise.all(chatIds.map(chatId => sendTelegramMessage(chatId, msg)))
-    chatIds.forEach(chatId =>
-      logTelegramMessage(user.institute_id, student.id, batch_id, chatId, 'schedule_change', msg, 'sent').catch(console.error)
-    )
+    await Promise.all(chatIds.map(chatId => sendTrackedMessage({ instituteId: user.institute_id, studentId: student.id, batchId: batch_id, chatId, messageType: 'schedule_change', message: msg })))
     sentCount++
   }
 

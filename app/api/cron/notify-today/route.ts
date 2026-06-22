@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { sendTelegramMessage, todayClassMessage, logTelegramMessage } from '@/lib/telegram'
+import { todayClassMessage, sendTrackedMessage } from '@/lib/telegram'
 
 const DAY_MAP: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' }
 
@@ -55,13 +55,10 @@ export async function GET(req: NextRequest) {
       const msg = todayClassMessage(student.name, batch.name, classTime, instituteName)
 
       await Promise.all(
-        chatIds.map(async chatId => {
-          const result = await sendTelegramMessage(chatId, msg)
-          logTelegramMessage(
-            batch.institute_id, student.id, batch.id, chatId,
-            'today_class_reminder', msg, result.ok ? 'sent' : 'failed'
-          ).catch(console.error)
-        })
+        chatIds.map(chatId => sendTrackedMessage({
+          instituteId: batch.institute_id, studentId: student.id, batchId: batch.id, chatId,
+          messageType: 'today_class_reminder', message: msg,
+        }))
       )
       totalSent++
     }

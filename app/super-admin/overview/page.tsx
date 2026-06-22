@@ -8,7 +8,7 @@ type Batch = { id: string; name: string; subject: string; schedule_slots: any[];
 type Teacher = { id: string; name: string; phone: string; telegram_chat_id: string | null; created_at: string }
 type Student = { id: string; name: string; parent_name?: string; parent_telegram_chat_id?: string; batch_id?: string; batches?: { name?: string }; created_at: string }
 type Report = { student_id: string; name: string; parent_telegram_chat_id: string | null; present: number; late: number; absent: number; logs: any[] }
-type Communication = { id: string; sent_at: string; student_name: string; batch_name: string; parent_name: string; message_type: string; message_content: string; recipient_telegram_chat_id: string; status: string }
+type Communication = { id: string; sent_at: string; student_name: string; batch_name: string; parent_name: string; message_type: string; message_content: string; recipient_telegram_chat_id: string; status: string; acknowledged_at: string | null }
 function fmt(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })
 }
@@ -49,6 +49,15 @@ const TYPE_STYLE: Record<string, string> = {
   schedule_change: 'bg-blue-100 text-blue-700',
   report: 'bg-purple-100 text-purple-700',
   today_class_reminder: 'bg-indigo-100 text-indigo-700',
+}
+
+// Delivery-status badge (label + colour). 'sent' is a legacy value kept for old rows.
+const DELIVERY_BADGE: Record<string, { label: string; style: string }> = {
+  delivered: { label: '✓ Delivered', style: 'bg-green-100 text-green-700' },
+  sent: { label: '✓ Sent', style: 'bg-green-100 text-green-700' },
+  blocked: { label: '⚠ Blocked', style: 'bg-amber-100 text-amber-700' },
+  failed: { label: '✗ Failed', style: 'bg-red-100 text-red-700' },
+  pending: { label: '… Pending', style: 'bg-gray-100 text-gray-600' },
 }
 
 function OverviewContent() {
@@ -391,9 +400,16 @@ function OverviewContent() {
                                     </span>
                                   </td>
                                   <td className="px-4 py-2">
-                                    <span className={`text-xs px-2 py-1 rounded ${c.status === 'sent' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                      {c.status === 'sent' ? '✓ Sent' : '✗ Failed'}
-                                    </span>
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className={`text-xs px-2 py-1 rounded ${(DELIVERY_BADGE[c.status] || DELIVERY_BADGE.failed).style}`}>
+                                        {(DELIVERY_BADGE[c.status] || { label: c.status }).label}
+                                      </span>
+                                      {c.acknowledged_at && (
+                                        <span className="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-700" title={`Acknowledged ${fmt(c.acknowledged_at)} ${fmtTime(c.acknowledged_at)}`}>
+                                          👍 Acked
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="px-4 py-2">
                                     <button
@@ -412,6 +428,9 @@ function OverviewContent() {
                                         <span><span className="font-medium text-gray-700">Batch:</span> {c.batch_name}</span>
                                         <span><span className="font-medium text-gray-700">Student:</span> {c.student_name}</span>
                                         <span><span className="font-medium text-gray-700">Parent:</span> {c.parent_name}</span>
+                                        {c.acknowledged_at && (
+                                          <span><span className="font-medium text-gray-700">👍 Acknowledged:</span> {fmt(c.acknowledged_at)} {fmtTime(c.acknowledged_at)}</span>
+                                        )}
                                       </div>
                                       <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed border-l-4 border-blue-300 pl-3">
                                         {c.message_content}

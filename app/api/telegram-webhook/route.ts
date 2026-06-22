@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { sendTelegramMessage } from '@/lib/telegram'
+import { sendTelegramMessage, answerCallbackQuery, editMessageReplyMarkup } from '@/lib/telegram'
 
 // Verify request is genuinely from Telegram
 function verifySecret(req: NextRequest) {
@@ -52,6 +52,47 @@ function formatAttendanceReport(students: { name: string; logs: { date: string; 
   return lines.join('\n')
 }
 
+// Process a tapped inline button. Currently only "ack:<logId>" — a parent
+// acknowledging an absent/alert message — is supported.
+async function handleCallbackQuery(cq: NonNullable<TelegramUpdate['callback_query']>) {
+  const fromId = cq.from?.id ? String(cq.from.id) : ''
+  const data = cq.data || ''
+
+  // Burst guard shared with the message path (silent drop beyond 5 taps/min)
+  if (fromId && isBurst(fromId)) {
+    await answerCallbackQuery(cq.id)
+    return
+  }
+
+  if (data.startsWith('ack:') && fromId) {
+    const logId = data.slice(4)
+
+    // Stamp acknowledgment only on this parent's own message row.
+    const { data: updated } = await supabaseAdmin
+      .from('telegram_message_log')
+      .update({ acknowledged_at: new Date().toISOString(), acknowledged_by_chat_id: fromId })
+      .eq('id', logId)
+      .eq('recipient_telegram_chat_id', fromId)
+      .is('acknowledged_at', null)
+      .select('id')
+
+    await answerCallbackQuery(cq.id, updated && updated.length > 0 ? 'Thanks! 👍' : 'Already acknowledged ✓')
+
+    // Swap the button for a non-clickable label so it can't be tapped again.
+    const chatId = cq.message?.chat?.id
+    const messageId = cq.message?.message_id
+    if (chatId != null && messageId != null) {
+      await editMessageReplyMarkup(String(chatId), messageId, {
+        inline_keyboard: [[{ text: '✅ Acknowledged', callback_data: 'acked' }]],
+      })
+    }
+    return
+  }
+
+  // Unknown callback — clear the spinner silently.
+  await answerCallbackQuery(cq.id)
+}
+
 export async function POST(req: NextRequest) {
   if (!verifySecret(req)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -62,6 +103,12 @@ export async function POST(req: NextRequest) {
     update = await req.json()
   } catch {
     return NextResponse.json({ ok: true }) // always return 200 to Telegram
+  }
+
+  // --- Handle callback_query — parent tapped an inline button (e.g. "👍 Got it") ---
+  if (update.callback_query) {
+    await handleCallbackQuery(update.callback_query)
+    return NextResponse.json({ ok: true })
   }
 
   const message = update.message
@@ -267,7 +314,13 @@ export async function GET(req: NextRequest) {
   }
 
   const webhookUrl = `${appUrl}/api/telegram-webhook`
-  const body: Record<string, string> = { url: webhookUrl }
+  // Explicitly allow callback_query so parent "👍 Got it" button taps are
+  // delivered (alongside normal messages). Omitting this reuses Telegram's
+  // previous setting, which could silently exclude callback_query.
+  const body: Record<string, unknown> = {
+    url: webhookUrl,
+    allowed_updates: ['message', 'callback_query'],
+  }
   if (secret) body.secret_token = secret
 
   const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
@@ -288,5 +341,14 @@ type TelegramUpdate = {
   message?: {
     text?: string
     chat?: { id: number }
+  }
+  callback_query?: {
+    id: string
+    data?: string
+    from?: { id: number }
+    message?: {
+      message_id: number
+      chat?: { id: number }
+    }
   }
 }

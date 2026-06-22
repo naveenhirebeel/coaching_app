@@ -1,6 +1,23 @@
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN!
 
-export async function sendTelegramMessage(chatId: string, message: string): Promise<{ ok: boolean; error?: string }> {
+// Granular delivery outcome for a single sendMessage call.
+//  - delivered: Telegram accepted the message and placed it in the chat
+//  - blocked:   parent blocked the bot or never pressed Start (HTTP 403)
+//  - failed:    any other API error or a network failure
+export type DeliveryStatus = 'delivered' | 'blocked' | 'failed'
+
+export type SendResult = {
+  ok: boolean
+  status: DeliveryStatus
+  messageId?: number
+  error?: string
+}
+
+export async function sendTelegramMessage(
+  chatId: string,
+  message: string,
+  options?: { replyMarkup?: object }
+): Promise<SendResult> {
   try {
     const res = await fetch(
       `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`,
@@ -11,18 +28,48 @@ export async function sendTelegramMessage(chatId: string, message: string): Prom
           chat_id: chatId,
           text: message,
           parse_mode: 'HTML',
+          ...(options?.replyMarkup ? { reply_markup: options.replyMarkup } : {}),
         }),
       }
     )
     const data = await res.json()
     if (!data.ok) {
       console.error('Telegram error:', data.description)
-      return { ok: false, error: data.description }
+      const status: DeliveryStatus = data.error_code === 403 ? 'blocked' : 'failed'
+      return { ok: false, status, error: data.description }
     }
-    return { ok: true }
+    return { ok: true, status: 'delivered', messageId: data.result?.message_id }
   } catch (err) {
     console.error('Telegram send failed:', err)
-    return { ok: false, error: 'Network error reaching Telegram' }
+    return { ok: false, status: 'failed', error: 'Network error reaching Telegram' }
+  }
+}
+
+// Acknowledge a tapped inline button so the loading spinner clears and an
+// optional toast is shown to the user.
+export async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, ...(text ? { text } : {}) }),
+    })
+  } catch (err) {
+    console.error('Telegram answerCallbackQuery failed:', err)
+  }
+}
+
+// Replace the inline keyboard on an already-sent message (e.g. swap the
+// "Got it" button for a disabled "Acknowledged" label after a tap).
+export async function editMessageReplyMarkup(chatId: string, messageId: number, replyMarkup: object): Promise<void> {
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/editMessageReplyMarkup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: replyMarkup }),
+    })
+  } catch (err) {
+    console.error('Telegram editMessageReplyMarkup failed:', err)
   }
 }
 
@@ -146,7 +193,8 @@ export async function logTelegramMessage(
   parentTgId: string,
   messageType: string,
   messageContent: string,
-  status: 'sent' | 'failed'
+  status: 'sent' | 'delivered' | 'blocked' | 'failed' | 'pending',
+  telegramMessageId?: number
 ) {
   const { supabaseAdmin } = await import('@/lib/supabase')
   const { error } = await supabaseAdmin.from('telegram_message_log').insert({
@@ -157,6 +205,66 @@ export async function logTelegramMessage(
     message_type: messageType,
     message_content: messageContent,
     status,
+    telegram_message_id: telegramMessageId ?? null,
   })
   if (error) console.error('Telegram log insert error:', error)
+}
+
+// Send a message AND record its real delivery status in telegram_message_log.
+// This is the single source of truth for the delivery flow — callers no longer
+// hardcode 'sent'.
+//
+// When withAck is true, an inline "👍 Got it" button is attached. To correlate
+// the tap (a callback_query) back to this log row, the row is inserted first to
+// obtain its id, which becomes the button's callback_data; the row is then
+// updated with the actual delivery status once the send completes.
+export async function sendTrackedMessage(opts: {
+  instituteId: string
+  studentId: string
+  batchId: string | null
+  chatId: string
+  messageType: string
+  message: string
+  withAck?: boolean
+}): Promise<SendResult> {
+  const { instituteId, studentId, batchId, chatId, messageType, message, withAck } = opts
+
+  if (!withAck) {
+    const result = await sendTelegramMessage(chatId, message)
+    logTelegramMessage(instituteId, studentId, batchId, chatId, messageType, message, result.status, result.messageId).catch(console.error)
+    return result
+  }
+
+  const { supabaseAdmin } = await import('@/lib/supabase')
+  const { data: row, error: insertError } = await supabaseAdmin
+    .from('telegram_message_log')
+    .insert({
+      institute_id: instituteId,
+      student_id: studentId,
+      batch_id: batchId || null,
+      recipient_telegram_chat_id: chatId,
+      message_type: messageType,
+      message_content: message,
+      status: 'pending',
+    })
+    .select('id')
+    .single()
+
+  if (insertError || !row) {
+    // Logging failed — still attempt to deliver the message (without a button,
+    // since we have no id to correlate the ack).
+    console.error('Telegram log insert error:', insertError)
+    return sendTelegramMessage(chatId, message)
+  }
+
+  const replyMarkup = { inline_keyboard: [[{ text: '👍 Got it', callback_data: `ack:${row.id}` }]] }
+  const result = await sendTelegramMessage(chatId, message, { replyMarkup })
+
+  supabaseAdmin
+    .from('telegram_message_log')
+    .update({ status: result.status, telegram_message_id: result.messageId ?? null })
+    .eq('id', row.id)
+    .then(({ error }) => { if (error) console.error('Telegram log update error:', error) })
+
+  return result
 }
