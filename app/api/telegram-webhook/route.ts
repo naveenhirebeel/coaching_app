@@ -330,9 +330,21 @@ export async function GET(req: NextRequest) {
   })
   const data = await res.json()
 
+  // Echo the resulting webhook config (server-side getWebhookInfo) so the live
+  // registration — especially allowed_updates — can be verified without direct
+  // access to the Telegram API from the caller.
+  let webhookInfo: unknown = null
+  try {
+    const infoRes = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`)
+    webhookInfo = (await infoRes.json())?.result ?? null
+  } catch (err) {
+    console.error('getWebhookInfo failed:', err)
+  }
+
   return NextResponse.json({
     webhookUrl,
     telegram: data,
+    webhookInfo,
   })
 }
 
