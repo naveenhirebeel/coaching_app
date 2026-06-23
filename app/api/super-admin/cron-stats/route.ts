@@ -29,6 +29,12 @@ export async function GET(req: NextRequest) {
     .gte('sent_at', from)
     .lte('sent_at', to)
 
+  // Success = message reached Telegram. 'sent' is the legacy value; the delivery
+  // flow now logs 'delivered'. Failure = 'failed' / 'blocked'. 'pending' is an
+  // in-flight ack send and is counted in neither bucket.
+  const SUCCESS_STATUSES = new Set(['sent', 'delivered'])
+  const FAILED_STATUSES = new Set(['failed', 'blocked'])
+
   const instituteMap: Record<string, { name: string; sent: number; failed: number }> = {}
   let totalSent = 0
   let totalFailed = 0
@@ -38,8 +44,8 @@ export async function GET(req: NextRequest) {
     if (!instituteMap[id]) {
       instituteMap[id] = { name: (log.institutes as { name?: string } | null)?.name || id, sent: 0, failed: 0 }
     }
-    if (log.status === 'sent') { instituteMap[id].sent++; totalSent++ }
-    else { instituteMap[id].failed++; totalFailed++ }
+    if (SUCCESS_STATUSES.has(log.status)) { instituteMap[id].sent++; totalSent++ }
+    else if (FAILED_STATUSES.has(log.status)) { instituteMap[id].failed++; totalFailed++ }
   }
 
   return NextResponse.json({
