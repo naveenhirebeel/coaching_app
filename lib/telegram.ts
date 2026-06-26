@@ -126,7 +126,7 @@ export function reportMessage(
   present: number,
   late: number,
   absent: number,
-  logs: { date: string; status: string; created_at: string; exit_time: string | null }[]
+  logs: { date: string; status: string; created_at: string; marked_at?: string | null; exit_time: string | null }[]
 ) {
   const total = present + late + absent
   const attended = present + late
@@ -136,7 +136,7 @@ export function reportMessage(
     const d = new Date(l.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })
     const statusIcon = l.status === 'present' ? '✅' : l.status === 'late' ? '⏰' : '❌'
     if (l.status === 'absent') return `${statusIcon} ${d} — ABSENT`
-    const entry = new Date(l.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
+    const entry = new Date(l.marked_at ?? l.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
     const exit = l.exit_time
       ? ` · Exit ${new Date(l.exit_time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}`
       : ''

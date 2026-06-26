@@ -11,6 +11,7 @@ type AttendanceRecord = {
   status: 'present' | 'late' | 'absent'
   date: string
   created_at: string
+  marked_at: string | null
   exit_time: string | null
   students: { name: string } | null
 }
@@ -176,7 +177,7 @@ export default function AttendanceCorrectionPage() {
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_STYLE[r.status]}`}>
                       {r.status.toUpperCase()}
                     </span>
-                    <span className="text-xs text-gray-500">Marked at {fmt(r.created_at)}</span>
+                    <span className="text-xs text-gray-500">Marked at {fmt(r.marked_at ?? r.created_at)}</span>
                     {r.exit_time && (
                       <span className="text-xs text-gray-500">· Exit {fmtExit(r.exit_time)}</span>
                     )}
@@ -242,7 +243,7 @@ export default function AttendanceCorrectionPage() {
               <div>
                 <h2 className="text-base font-semibold text-gray-900 mb-1">Delete Attendance Entry?</h2>
                 <p className="text-sm text-gray-600">
-                  <span className="font-medium">{confirmDelete.students?.name}</span> — {confirmDelete.status.toUpperCase()}, marked at {fmt(confirmDelete.created_at)}
+                  <span className="font-medium">{confirmDelete.students?.name}</span> — {confirmDelete.status.toUpperCase()}, marked at {fmt(confirmDelete.marked_at ?? confirmDelete.created_at)}
                 </p>
               </div>
 
@@ -250,7 +251,7 @@ export default function AttendanceCorrectionPage() {
                 <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 text-sm text-orange-800 space-y-1">
                   <p className="font-semibold">⚠️ This entry has an exit time ({fmtExit(confirmDelete.exit_time!)})</p>
                   {canMoveExit
-                    ? <p className="text-xs">You can move the exit time to the other entry ({otherEntry.status.toUpperCase()}, {fmt(otherEntry.created_at)}) before deleting, so it isn't lost.</p>
+                    ? <p className="text-xs">You can move the exit time to the other entry ({otherEntry.status.toUpperCase()}, {fmt(otherEntry.marked_at ?? otherEntry.created_at)}) before deleting, so it isn't lost.</p>
                     : <p className="text-xs">Deleting will permanently remove this exit time — there is no other entry to move it to.</p>
                   }
                 </div>

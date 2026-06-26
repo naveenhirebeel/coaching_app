@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { student_id, batch_id, date, status, notify_present } = await req.json()
+  const { student_id, batch_id, date, status, notify_present, marked_at } = await req.json()
 
   if (!student_id || !batch_id || !date || !status) {
     return NextResponse.json({ error: 'student_id, batch_id, date and status are required' }, { status: 400 })
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   const { data: inserted, error: insertError } = await supabaseAdmin
     .from('attendance')
-    .insert({ student_id, batch_id, date, status, institute_id: user.institute_id })
+    .insert({ student_id, batch_id, date, status, institute_id: user.institute_id, ...(marked_at ? { marked_at } : {}) })
     .select('id')
     .single()
 
@@ -53,10 +53,10 @@ export async function POST(req: NextRequest) {
   const batchName = batch?.name || 'Class'
   const instituteName = (batch?.institutes as { name?: string })?.name || ''
   const institutePhone = (batch?.institutes as { phone?: string })?.phone || ''
-  const now = new Date()
-  const formattedDate = now.toLocaleDateString('en-IN', {
+  const when = marked_at ? new Date(marked_at) : new Date()
+  const formattedDate = when.toLocaleDateString('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata'
-  }) + ' at ' + now.toLocaleTimeString('en-IN', {
+  }) + ' at ' + when.toLocaleTimeString('en-IN', {
     hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata'
   })
 
@@ -112,7 +112,7 @@ export async function PATCH(req: NextRequest) {
   // Teacher: mark exit
   if (record.exit_time) return NextResponse.json({ error: 'Exit already marked' }, { status: 400 })
 
-  const exitTime = new Date()
+  const exitTime = body.exit_time ? new Date(body.exit_time) : new Date()
   const formattedTime = exitTime.toLocaleTimeString('en-IN', {
     hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata'
   })

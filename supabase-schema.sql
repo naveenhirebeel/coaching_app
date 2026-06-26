@@ -62,6 +62,7 @@ create table attendance (
   student_id uuid references students(id) on delete cascade,
   date date not null,
   status text check (status in ('present', 'absent', 'late')) not null,
+  marked_at timestamptz, -- teacher-chosen entry time (adjustable); falls back to created_at when null
   exit_time timestamptz,
   created_at timestamptz default now()
   -- no unique constraint: multiple entries per student/day allowed for full audit log
@@ -125,32 +126,26 @@ create table telegram_message_log (
 -- 3. Allow multiple attendance entries per student per day (full audit log)
 -- alter table attendance drop constraint if exists attendance_student_id_date_batch_id_key;
 
--- 4. Batch schedule slots (JSONB — multiple day/time slots per batch)
--- alter table batches add column if not exists schedule_slots jsonb default '[]';
-
--- 10. Teacher email + password auth
--- alter table teachers add column if not exists email text;
--- alter table teachers add column if not exists password_hash text;
-
--- 9. Parent report request throttle (once per day per chat ID)
--- create table if not exists parent_report_requests (
---   id uuid primary key default gen_random_uuid(),
---   chat_id text not null,
---   requested_date date not null,
---   created_at timestamptz default now(),
---   unique(chat_id, requested_date)
--- );
-
--- 8. Parent mobile number for auto-linking Telegram
--- alter table students add column if not exists parent_mobile text;
--- alter table students add column if not exists parent2_mobile text;
-
--- 5. Preserve attendance history when batch is deleted (set null instead of cascade)
+-- 4. Preserve attendance history when batch is deleted (set null instead of cascade)
 -- alter table attendance drop constraint attendance_batch_id_fkey;
 -- alter table attendance add constraint attendance_batch_id_fkey
 --   foreign key (batch_id) references batches(id) on delete set null;
 
--- 6. Create activity_logs table (institute event tracking)
+-- 5. Adjustable marking time (teacher-chosen entry time; falls back to created_at when null)
+-- alter table attendance add column if not exists marked_at timestamptz;
+
+-- 6. Batch schedule slots (JSONB — multiple day/time slots per batch)
+-- alter table batches add column if not exists schedule_slots jsonb default '[]';
+
+-- 7. Parent mobile number for auto-linking Telegram
+-- alter table students add column if not exists parent_mobile text;
+-- alter table students add column if not exists parent2_mobile text;
+
+-- 8. Teacher email + password auth
+-- alter table teachers add column if not exists email text;
+-- alter table teachers add column if not exists password_hash text;
+
+-- 9. Create activity_logs table (institute event tracking)
 -- create table if not exists activity_logs (
 --   id uuid primary key default gen_random_uuid(),
 --   institute_id uuid not null references institutes(id) on delete cascade,
@@ -164,20 +159,16 @@ create table telegram_message_log (
 --   created_at timestamptz default now()
 -- );
 
--- 8. Extend telegram_message_log to allow schedule_change and report message types
--- alter table telegram_message_log drop constraint if exists telegram_message_log_message_type_check;
--- alter table telegram_message_log add constraint telegram_message_log_message_type_check
---   check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report', 'today_class_reminder'));
+-- 10. Parent report request throttle (once per day per chat ID)
+-- create table if not exists parent_report_requests (
+--   id uuid primary key default gen_random_uuid(),
+--   chat_id text not null,
+--   requested_date date not null,
+--   created_at timestamptz default now(),
+--   unique(chat_id, requested_date)
+-- );
 
--- 11. Delivery flow: granular send status + parent acknowledgment tracking
--- alter table telegram_message_log drop constraint if exists telegram_message_log_status_check;
--- alter table telegram_message_log add constraint telegram_message_log_status_check
---   check (status in ('sent', 'delivered', 'blocked', 'failed', 'pending'));
--- alter table telegram_message_log add column if not exists telegram_message_id bigint;
--- alter table telegram_message_log add column if not exists acknowledged_at timestamptz;
--- alter table telegram_message_log add column if not exists acknowledged_by_chat_id text;
-
--- 7. Create telegram_message_log table (communications tracking)
+-- 11. Create telegram_message_log table (communications tracking)
 -- create table if not exists telegram_message_log (
 --   id uuid primary key default gen_random_uuid(),
 --   institute_id uuid not null references institutes(id) on delete cascade,
@@ -193,3 +184,16 @@ create table telegram_message_log (
 --   sent_at timestamptz default now(),
 --   created_at timestamptz default now()
 -- );
+
+-- 12. Extend telegram_message_log to allow schedule_change and report message types
+-- alter table telegram_message_log drop constraint if exists telegram_message_log_message_type_check;
+-- alter table telegram_message_log add constraint telegram_message_log_message_type_check
+--   check (message_type in ('present', 'absent', 'late', 'exit', 'alert', 'schedule_change', 'report', 'today_class_reminder'));
+
+-- 13. Delivery flow: granular send status + parent acknowledgment tracking
+-- alter table telegram_message_log drop constraint if exists telegram_message_log_status_check;
+-- alter table telegram_message_log add constraint telegram_message_log_status_check
+--   check (status in ('sent', 'delivered', 'blocked', 'failed', 'pending'));
+-- alter table telegram_message_log add column if not exists telegram_message_id bigint;
+-- alter table telegram_message_log add column if not exists acknowledged_at timestamptz;
+-- alter table telegram_message_log add column if not exists acknowledged_by_chat_id text;

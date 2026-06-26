@@ -10,6 +10,14 @@ type MarkedMap = Record<string, MarkedStatus>   // student_id → status
 type SendingMap = Record<string, MarkedStatus>  // student_id → which button is loading
 type AttendanceIdMap = Record<string, string>   // student_id → attendance record id
 type ExitMap = Record<string, string>           // student_id → exit time string
+type TimeMap = Record<string, string>           // student_id → editable "HH:MM"
+
+// Current time in IST as "HH:MM" (24h) for <input type="time">
+function nowHHMM() {
+  return new Date().toLocaleTimeString('en-GB', {
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata',
+  })
+}
 
 function AttendanceContent() {
   const router = useRouter()
@@ -24,6 +32,8 @@ function AttendanceContent() {
   const [exits, setExits] = useState<ExitMap>({})
   const [exitSending, setExitSending] = useState<Record<string, boolean>>({})
   const [notifyPresent, setNotifyPresent] = useState(true)
+  const [entryTimes, setEntryTimes] = useState<TimeMap>({})  // student_id → adjustable entry "HH:MM"
+  const [exitTimes, setExitTimes] = useState<TimeMap>({})    // student_id → adjustable exit "HH:MM"
 
   function getToken() { return localStorage.getItem('token') || '' }
 
@@ -68,6 +78,8 @@ function AttendanceContent() {
   async function mark(studentId: string, status: MarkedStatus) {
     setSending(prev => ({ ...prev, [studentId]: status }))
     const today = new Date().toISOString().split('T')[0]
+    const hhmm = entryTimes[studentId] || nowHHMM()
+    const marked_at = `${today}T${hhmm}:00+05:30`  // chosen wall-clock time pinned to IST
 
     const res = await fetch('/api/attendance', {
       method: 'POST',
@@ -78,6 +90,7 @@ function AttendanceContent() {
         date: today,
         status,
         notify_present: notifyPresent,
+        marked_at,
       }),
     })
     const data = await res.json()
@@ -97,11 +110,14 @@ function AttendanceContent() {
     const attendanceId = attendanceIds[studentId]
     if (!attendanceId) return
     setExitSending(prev => ({ ...prev, [studentId]: true }))
+    const today = new Date().toISOString().split('T')[0]
+    const hhmm = exitTimes[studentId] || nowHHMM()
+    const exit_time = `${today}T${hhmm}:00+05:30`  // chosen wall-clock time pinned to IST
 
     const res = await fetch('/api/attendance', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ attendance_id: attendanceId }),
+      body: JSON.stringify({ attendance_id: attendanceId, exit_time }),
     })
     const data = await res.json()
 
@@ -189,15 +205,36 @@ function AttendanceContent() {
               </div>
 
               {isInClass ? (
-                <button
-                  onClick={() => markExit(s.id)}
-                  disabled={isExiting}
-                  className="w-full text-sm py-2.5 rounded-lg bg-gray-700 text-white font-medium hover:bg-gray-800 disabled:opacity-50 transition"
-                >
-                  {isExiting ? 'Sending...' : 'Send Exit Alert'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={exitTimes[s.id] ?? nowHHMM()}
+                    onChange={e => setExitTimes(prev => ({ ...prev, [s.id]: e.target.value }))}
+                    aria-label="Exit time"
+                    className="shrink-0 text-sm py-2 px-2 rounded-lg border border-gray-300 text-gray-700 bg-white"
+                  />
+                  <button
+                    onClick={() => markExit(s.id)}
+                    disabled={isExiting}
+                    className="flex-1 text-sm py-2.5 rounded-lg bg-gray-700 text-white font-medium hover:bg-gray-800 disabled:opacity-50 transition"
+                  >
+                    {isExiting ? 'Sending...' : 'Send Exit Alert'}
+                  </button>
+                </div>
               ) : (
-                <div className="flex gap-2">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span>🕐 Time</span>
+                    <input
+                      type="time"
+                      value={entryTimes[s.id] ?? nowHHMM()}
+                      onChange={e => setEntryTimes(prev => ({ ...prev, [s.id]: e.target.value }))}
+                      aria-label="Marking time"
+                      className="text-sm py-1.5 px-2 rounded-lg border border-gray-300 text-gray-700 bg-white"
+                    />
+                    <span className="text-gray-400">— adjust before marking if needed</span>
+                  </div>
+                  <div className="flex gap-2">
                   {(['present', 'late', 'absent'] as MarkedStatus[]).map(status => {
                     const isActive = currentStatus === status && !exitTime
                     const isLoading = isSending === status
@@ -215,6 +252,7 @@ function AttendanceContent() {
                       </button>
                     )
                   })}
+                  </div>
                 </div>
               )}
             </div>

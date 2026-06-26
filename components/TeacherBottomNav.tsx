@@ -21,6 +21,15 @@ const TABS = [
       </svg>
     ),
   },
+  {
+    href: '/teacher/messages',
+    label: 'Messages',
+    icon: (active: boolean) => (
+      <svg className={`w-6 h-6 ${active ? 'text-orange-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    ),
+  },
 ]
 
 export default function TeacherBottomNav() {

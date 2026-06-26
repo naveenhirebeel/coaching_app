@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   // Fetch attendance for the period
   const { data: records } = await supabaseAdmin
     .from('attendance')
-    .select('date, status, created_at, exit_time')
+    .select('date, status, created_at, marked_at, exit_time')
     .eq('student_id', student_id)
     .eq('institute_id', user.institute_id)
     .gte('date', from)
