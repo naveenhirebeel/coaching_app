@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser, getSuperAdminUser, isApprovedInstitute } from '@/lib/auth'
-import { recomputeInvoice, periodLabelFromMonth, firstOfMonth } from '@/lib/fees'
+import { recomputeInvoice, periodLabelFromMonth, firstOfMonth, getTeacherBatchIds } from '@/lib/fees'
 import { logActivity } from '@/lib/activity'
 
 // GET /api/fees — list invoices for the caller's institute.
@@ -25,10 +25,17 @@ export async function GET(req: NextRequest) {
 
   let query = supabaseAdmin
     .from('fee_invoices')
-    .select('*, students(name), batches(name, subject)')
+    .select('*, students(name), batches(name, subject, teacher_id, teachers(name))')
     .eq('institute_id', instituteId)
     .order('due_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false })
+
+  // Teachers only see invoices for batches assigned to them.
+  if (user.role === 'teacher' && 'id' in user) {
+    const myBatchIds = await getTeacherBatchIds(user.id as string, instituteId)
+    if (myBatchIds.length === 0) return NextResponse.json([])
+    query = query.in('batch_id', myBatchIds)
+  }
 
   const studentId = searchParams.get('student_id')
   const batchId = searchParams.get('batch_id')
@@ -60,8 +67,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'period_month is required' }, { status: 400 })
     }
 
-    // Resolve the target batches: every batch in the institute when `all` is set,
-    // otherwise the provided list (batch_ids), with batch_id kept for compat.
+    // Explicit amount (when given) overrides each batch's own monthly_fee.
+    const overrideAmount = body.amount != null && body.amount !== '' ? Number(body.amount) : null
+    if (overrideAmount != null && (Number.isNaN(overrideAmount) || overrideAmount < 0)) {
+      return NextResponse.json({ error: 'Amount must be a non-negative number' }, { status: 400 })
+    }
+
+    // Resolve target batches: all batches when `all`, else the provided list
+    // (batch_id kept for backward compat).
     let batchIds: string[] = []
     if (body.all) {
       const { data } = await supabaseAdmin.from('batches').select('id').eq('institute_id', user.institute_id)
@@ -71,72 +84,76 @@ export async function POST(req: NextRequest) {
     } else if (body.batch_id) {
       batchIds = [body.batch_id]
     }
-    if (batchIds.length === 0) {
-      return NextResponse.json({ error: 'Select at least one batch' }, { status: 400 })
+    const explicitStudentIds: string[] = Array.isArray(body.student_ids) ? body.student_ids.filter(Boolean) : []
+
+    if (batchIds.length === 0 && explicitStudentIds.length === 0) {
+      return NextResponse.json({ error: 'Select at least one batch or student' }, { status: 400 })
     }
 
-    // Explicit amount (when given) overrides every batch's own monthly_fee.
-    const overrideAmount = body.amount != null && body.amount !== '' ? Number(body.amount) : null
-    if (overrideAmount != null && (Number.isNaN(overrideAmount) || overrideAmount < 0)) {
-      return NextResponse.json({ error: 'Amount must be a non-negative number' }, { status: 400 })
+    // Build a deduped map of target student -> { batch_id, monthly_fee } from
+    // (a) every student in the selected batches and (b) explicitly picked students.
+    const targets = new Map<string, { batch_id: string | null; monthly_fee: number | null }>()
+
+    if (batchIds.length > 0) {
+      const { data: batchRows } = await supabaseAdmin
+        .from('batches')
+        .select('id, monthly_fee, students(id)')
+        .eq('institute_id', user.institute_id)
+        .in('id', batchIds)
+      for (const b of batchRows || []) {
+        const fee = b.monthly_fee != null ? Number(b.monthly_fee) : null
+        for (const s of ((b.students as { id: string }[]) || [])) {
+          if (!targets.has(s.id)) targets.set(s.id, { batch_id: b.id, monthly_fee: fee })
+        }
+      }
     }
 
-    const { data: batches } = await supabaseAdmin
-      .from('batches')
-      .select('id, name, monthly_fee')
-      .eq('institute_id', user.institute_id)
-      .in('id', batchIds)
-    if (!batches || batches.length === 0) {
-      return NextResponse.json({ error: 'No matching batches found' }, { status: 404 })
+    if (explicitStudentIds.length > 0) {
+      const { data: studentRows } = await supabaseAdmin
+        .from('students')
+        .select('id, batch_id, batches(monthly_fee)')
+        .eq('institute_id', user.institute_id)
+        .in('id', explicitStudentIds)
+      for (const s of studentRows || []) {
+        if (!targets.has(s.id)) {
+          const fee = (s.batches as { monthly_fee?: number | null } | null)?.monthly_fee
+          targets.set(s.id, { batch_id: s.batch_id, monthly_fee: fee != null ? Number(fee) : null })
+        }
+      }
+    }
+
+    if (targets.size === 0) {
+      return NextResponse.json({ error: 'No students found for the selection' }, { status: 400 })
     }
 
     const monthDate = firstOfMonth(period_month)
     const periodLabel = periodLabelFromMonth(period_month)
 
+    // Skip students who already have an invoice for this month (single query).
+    const { data: existing } = await supabaseAdmin
+      .from('fee_invoices')
+      .select('student_id')
+      .eq('institute_id', user.institute_id)
+      .eq('period_month', monthDate)
+      .in('student_id', [...targets.keys()])
+    const already = new Set((existing || []).map(e => e.student_id))
+
     const rows: Record<string, unknown>[] = []
-    const details: { batch_id: string; name: string; created: number; skipped: number; error?: string }[] = []
-    let totalSkipped = 0
-
-    for (const batch of batches) {
-      const amount = overrideAmount != null ? overrideAmount : batch.monthly_fee != null ? Number(batch.monthly_fee) : null
-      if (amount == null || Number.isNaN(amount) || amount < 0) {
-        details.push({ batch_id: batch.id, name: batch.name, created: 0, skipped: 0, error: 'no amount or monthly fee' })
-        continue
-      }
-
-      const { data: students } = await supabaseAdmin
-        .from('students')
-        .select('id')
-        .eq('batch_id', batch.id)
-        .eq('institute_id', user.institute_id)
-      if (!students || students.length === 0) {
-        details.push({ batch_id: batch.id, name: batch.name, created: 0, skipped: 0, error: 'no students' })
-        continue
-      }
-
-      // Skip students who already have an invoice for this month.
-      const { data: existing } = await supabaseAdmin
-        .from('fee_invoices')
-        .select('student_id')
-        .eq('batch_id', batch.id)
-        .eq('period_month', monthDate)
-      const already = new Set((existing || []).map(e => e.student_id))
-
-      const newStudents = students.filter(s => !already.has(s.id))
-      for (const s of newStudents) {
-        rows.push({
-          institute_id: user.institute_id,
-          student_id: s.id,
-          batch_id: batch.id,
-          period_label: periodLabel,
-          period_month: monthDate,
-          amount,
-          due_date: due_date || null,
-          status: 'pending',
-        })
-      }
-      totalSkipped += already.size
-      details.push({ batch_id: batch.id, name: batch.name, created: newStudents.length, skipped: already.size })
+    let skippedNoAmount = 0
+    for (const [studentId, info] of targets) {
+      if (already.has(studentId)) continue
+      const amount = overrideAmount != null ? overrideAmount : info.monthly_fee
+      if (amount == null || Number.isNaN(amount) || amount < 0) { skippedNoAmount++; continue }
+      rows.push({
+        institute_id: user.institute_id,
+        student_id: studentId,
+        batch_id: info.batch_id,
+        period_label: periodLabel,
+        period_month: monthDate,
+        amount,
+        due_date: due_date || null,
+        status: 'pending',
+      })
     }
 
     if (rows.length > 0) {
@@ -150,11 +167,11 @@ export async function POST(req: NextRequest) {
       actorType: 'admin',
       actorId: user.id,
       entityType: 'batch',
-      entityName: batches.length === 1 ? batches[0].name : `${batches.length} batches`,
-      details: { period: periodLabel, count: rows.length, batches: batches.length },
+      entityName: `${rows.length} invoice(s)`,
+      details: { period: periodLabel, count: rows.length, batches: batchIds.length, students: explicitStudentIds.length },
     }).catch(console.error)
 
-    return NextResponse.json({ created: rows.length, skipped: totalSkipped, details })
+    return NextResponse.json({ created: rows.length, skipped: already.size, skippedNoAmount })
   }
 
   // Single ad-hoc charge
@@ -187,7 +204,7 @@ export async function POST(req: NextRequest) {
       notes: notes || null,
       status: 'pending',
     })
-    .select('*, students(name), batches(name, subject)')
+    .select('*, students(name), batches(name, subject, teacher_id, teachers(name))')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -206,24 +223,34 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data)
 }
 
-// PATCH /api/fees — admin only. Edit an invoice, or waive/unwaive it.
+// PATCH /api/fees — admin, or teacher for their own batches. Edit or waive/unwaive.
 //   Edit:    { id, amount?, due_date?, period_label?, notes? }
 //   Waive:   { id, action: 'waive' }
 //   Unwaive: { id, action: 'unwaive' }  (recomputes status from the ledger)
 export async function PATCH(req: NextRequest) {
   const user = getAuthUser(req)
-  if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user || (user.role !== 'admin' && user.role !== 'teacher')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const { id, action, amount, due_date, period_label, notes } = await req.json()
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
   const { data: invoice } = await supabaseAdmin
     .from('fee_invoices')
-    .select('id, student_id, period_label, students(name)')
+    .select('id, student_id, batch_id, period_label, students(name)')
     .eq('id', id)
     .eq('institute_id', user.institute_id)
     .single()
   if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+
+  // Teachers may only act on invoices for batches assigned to them.
+  if (user.role === 'teacher') {
+    const myBatchIds = await getTeacherBatchIds(user.id, user.institute_id)
+    if (!invoice.batch_id || !myBatchIds.includes(invoice.batch_id)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
 
   if (action === 'waive') {
     const { error } = await supabaseAdmin
@@ -236,7 +263,7 @@ export async function PATCH(req: NextRequest) {
     logActivity({
       instituteId: user.institute_id,
       eventType: 'fee_waived',
-      actorType: 'admin',
+      actorType: user.role as 'admin' | 'teacher',
       actorId: user.id,
       entityType: 'student',
       entityId: invoice.student_id,
@@ -246,7 +273,7 @@ export async function PATCH(req: NextRequest) {
 
     const { data } = await supabaseAdmin
       .from('fee_invoices')
-      .select('*, students(name), batches(name, subject)')
+      .select('*, students(name), batches(name, subject, teacher_id, teachers(name))')
       .eq('id', id)
       .single()
     return NextResponse.json(data)
@@ -258,7 +285,7 @@ export async function PATCH(req: NextRequest) {
     await recomputeInvoice(id, user.institute_id)
     const { data } = await supabaseAdmin
       .from('fee_invoices')
-      .select('*, students(name), batches(name, subject)')
+      .select('*, students(name), batches(name, subject, teacher_id, teachers(name))')
       .eq('id', id)
       .single()
     return NextResponse.json(data)
@@ -292,7 +319,7 @@ export async function PATCH(req: NextRequest) {
 
   const { data } = await supabaseAdmin
     .from('fee_invoices')
-    .select('*, students(name), batches(name, subject)')
+    .select('*, students(name), batches(name, subject, teacher_id, teachers(name))')
     .eq('id', id)
     .single()
   return NextResponse.json(data)

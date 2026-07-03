@@ -4,57 +4,43 @@ import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
 import AdminBottomNav from '@/components/AdminBottomNav'
 import BottomSheet from '@/components/BottomSheet'
-import { formatINR, PAYMENT_MODES, type InvoiceStatus, type PaymentMode } from '@/lib/fees'
+import InvoiceCard from '@/components/fees/InvoiceCard'
+import RecordPaymentSheet from '@/components/fees/RecordPaymentSheet'
+import EditInvoiceSheet from '@/components/fees/EditInvoiceSheet'
+import LedgerSheet from '@/components/fees/LedgerSheet'
+import { FeeInvoice } from '@/components/fees/types'
+import { formatINR, periodLabelFromMonth, type InvoiceStatus } from '@/lib/fees'
 
-type Invoice = {
-  id: string
-  student_id: string
-  batch_id: string | null
-  period_label: string
-  amount: number
-  amount_paid: number
-  due_date: string | null
-  status: InvoiceStatus
-  notes: string | null
-  students?: { name: string }
-  batches?: { name: string; subject: string }
-}
-type Batch = { id: string; name: string; subject: string; monthly_fee: number | null }
-type Student = { id: string; name: string; batch_id: string }
-type Payment = {
-  id: string
-  amount: number
-  mode: string
-  reference: string | null
-  note: string | null
-  paid_at: string
-  recorded_by_role: string | null
-  fee_invoices?: { period_label: string }
-}
+type Batch = { id: string; name: string; subject: string; monthly_fee: number | null; teacher_id?: string | null; teachers?: { name: string } | null }
+type Student = { id: string; name: string; batch_id: string; batches?: { name: string } }
 
-const STATUS_PILL: Record<InvoiceStatus, string> = {
-  pending: 'bg-orange-100 text-orange-700',
-  partial: 'bg-amber-100 text-amber-700',
-  paid: 'bg-green-100 text-green-700',
-  waived: 'bg-gray-100 text-gray-500',
-}
+const ALL = '__all__'
+const NONE = '__none__'
 
 function currentMonth() {
   return new Date().toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', timeZone: 'Asia/Kolkata' }).slice(0, 7)
 }
+function ymOf(dateStr: string | null): string | null {
+  return dateStr ? dateStr.slice(0, 7) : null
+}
 
 export default function FeesPage() {
   const router = useRouter()
-  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [invoices, setInvoices] = useState<FeeInvoice[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [pageLoading, setPageLoading] = useState(true)
+
+  // Filters
+  const [monthFilter, setMonthFilter] = useState<string>(currentMonth())
   const [batchFilter, setBatchFilter] = useState('')
+  const [teacherFilter, setTeacherFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'' | InvoiceStatus>('')
 
   // Generate month sheet
   const [showGenerate, setShowGenerate] = useState(false)
-  const [genForm, setGenForm] = useState({ batch_ids: [] as string[], all: false, period_month: currentMonth(), amount: '', due_date: '' })
+  const [genForm, setGenForm] = useState({ all: false, batch_ids: [] as string[], student_ids: [] as string[], period_month: currentMonth(), amount: '', due_date: '' })
+  const [studentSearch, setStudentSearch] = useState('')
   const [genLoading, setGenLoading] = useState(false)
   const [genError, setGenError] = useState('')
   const [genMsg, setGenMsg] = useState('')
@@ -65,17 +51,10 @@ export default function FeesPage() {
   const [chargeLoading, setChargeLoading] = useState(false)
   const [chargeError, setChargeError] = useState('')
 
-  // Record payment sheet
-  const [payInvoice, setPayInvoice] = useState<Invoice | null>(null)
-  const [payForm, setPayForm] = useState({ amount: '', mode: 'cash' as PaymentMode, reference: '', note: '' })
-  const [payLoading, setPayLoading] = useState(false)
-  const [payError, setPayError] = useState('')
-
-  // Ledger sheet
-  const [ledgerFor, setLedgerFor] = useState<Invoice | null>(null)
-  const [ledger, setLedger] = useState<Payment[]>([])
-  const [ledgerLoading, setLedgerLoading] = useState(false)
-
+  // Shared sheets
+  const [payInvoice, setPayInvoice] = useState<FeeInvoice | null>(null)
+  const [editInvoice, setEditInvoice] = useState<FeeInvoice | null>(null)
+  const [ledgerInvoice, setLedgerInvoice] = useState<FeeInvoice | null>(null)
   const [waivingId, setWaivingId] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
 
@@ -94,32 +73,57 @@ export default function FeesPage() {
     setPageLoading(false)
   }
 
-  // Load on mount. setState runs after awaits (not synchronously) — the
-  // react-hooks/set-state-in-effect heuristic false-positives on this idiom.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [])
 
-  const filtered = invoices.filter(i =>
-    (!batchFilter || i.batch_id === batchFilter) &&
-    (!statusFilter || i.status === statusFilter)
+  // Teacher options derived from batches (each batch carries teacher_id + teachers.name).
+  const teacherOptions = Array.from(
+    new Map(batches.filter(b => b.teacher_id).map(b => [b.teacher_id as string, b.teachers?.name || 'Teacher'])).entries()
   )
 
-  // Outstanding excludes waived invoices; collected is the sum of all payments.
-  const outstanding = invoices
+  // Month options: months present in invoices ∪ current month, newest first.
+  const monthSet = new Set<string>([currentMonth()])
+  invoices.forEach(i => { const ym = ymOf(i.period_month); if (ym) monthSet.add(ym) })
+  const monthOptions = Array.from(monthSet).sort().reverse()
+
+  function matchesMonth(i: FeeInvoice) {
+    if (monthFilter === ALL) return true
+    if (monthFilter === NONE) return !i.period_month
+    return ymOf(i.period_month) === monthFilter
+  }
+
+  // Scope filters (month + batch + teacher) drive both the summary and the list;
+  // the status filter refines only the list.
+  const scopeFiltered = invoices.filter(i =>
+    matchesMonth(i) &&
+    (!batchFilter || i.batch_id === batchFilter) &&
+    (!teacherFilter || i.batches?.teacher_id === teacherFilter)
+  )
+  const filtered = scopeFiltered.filter(i => !statusFilter || i.status === statusFilter)
+
+  const outstanding = scopeFiltered
     .filter(i => i.status !== 'waived')
     .reduce((sum, i) => sum + (Number(i.amount) - Number(i.amount_paid)), 0)
-  const collected = invoices.reduce((sum, i) => sum + Number(i.amount_paid), 0)
+  const collected = scopeFiltered.reduce((sum, i) => sum + Number(i.amount_paid), 0)
+
+  function openGenerate() {
+    setGenForm({ all: false, batch_ids: [], student_ids: [], period_month: currentMonth(), amount: '', due_date: '' })
+    setStudentSearch(''); setGenError(''); setGenMsg('')
+    setShowGenerate(true)
+  }
 
   function toggleGenBatch(id: string) {
-    setGenForm(prev => ({
-      ...prev,
-      batch_ids: prev.batch_ids.includes(id) ? prev.batch_ids.filter(b => b !== id) : [...prev.batch_ids, id],
-    }))
+    setGenForm(prev => ({ ...prev, batch_ids: prev.batch_ids.includes(id) ? prev.batch_ids.filter(b => b !== id) : [...prev.batch_ids, id] }))
+  }
+  function toggleGenStudent(id: string) {
+    setGenForm(prev => ({ ...prev, student_ids: prev.student_ids.includes(id) ? prev.student_ids.filter(s => s !== id) : [...prev.student_ids, id] }))
   }
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault()
-    if (!genForm.all && genForm.batch_ids.length === 0) return setGenError('Select at least one batch')
+    if (!genForm.all && genForm.batch_ids.length === 0 && genForm.student_ids.length === 0) {
+      return setGenError('Select all batches, some batches, or individual students')
+    }
     setGenLoading(true); setGenError(''); setGenMsg('')
     const res = await fetch('/api/fees', {
       method: 'POST',
@@ -128,6 +132,7 @@ export default function FeesPage() {
         generate: true,
         all: genForm.all,
         batch_ids: genForm.batch_ids,
+        student_ids: genForm.student_ids,
         period_month: genForm.period_month,
         due_date: genForm.due_date,
         amount: genForm.amount || undefined,
@@ -136,11 +141,10 @@ export default function FeesPage() {
     const data = await res.json()
     setGenLoading(false)
     if (!res.ok) return setGenError(data.error)
-    const noAmount = (data.details || []).filter((d: { error?: string }) => d.error === 'no amount or monthly fee').length
     setGenMsg(
       `Created ${data.created} invoice(s)` +
       (data.skipped ? `, skipped ${data.skipped} already invoiced` : '') +
-      (noAmount ? `. ${noAmount} batch(es) skipped — no amount or monthly fee` : '') + '.'
+      (data.skippedNoAmount ? `, ${data.skippedNoAmount} skipped (no amount/monthly fee)` : '') + '.'
     )
     load()
   }
@@ -162,37 +166,6 @@ export default function FeesPage() {
     load()
   }
 
-  function openPayment(inv: Invoice) {
-    setPayInvoice(inv)
-    const balance = Number(inv.amount) - Number(inv.amount_paid)
-    setPayForm({ amount: balance > 0 ? String(balance) : '', mode: 'cash', reference: '', note: '' })
-    setPayError('')
-  }
-
-  async function handlePayment(e: React.FormEvent) {
-    e.preventDefault()
-    if (!payInvoice) return
-    setPayLoading(true); setPayError('')
-    const res = await fetch('/api/fees/payments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ invoice_id: payInvoice.id, ...payForm }),
-    })
-    const data = await res.json()
-    setPayLoading(false)
-    if (!res.ok) return setPayError(data.error)
-    setPayInvoice(null)
-    load()
-  }
-
-  async function openLedger(inv: Invoice) {
-    setLedgerFor(inv)
-    setLedgerLoading(true)
-    const res = await fetch(`/api/fees/payments?invoice_id=${inv.id}`, { headers: { Authorization: `Bearer ${getToken()}` } })
-    setLedger(res.ok ? await res.json() : [])
-    setLedgerLoading(false)
-  }
-
   async function handleWaive(id: string) {
     setActionLoading(true)
     await fetch('/api/fees', {
@@ -205,13 +178,14 @@ export default function FeesPage() {
     load()
   }
 
+  const genStudentList = students.filter(s => !studentSearch || s.name.toLowerCase().includes(studentSearch.toLowerCase()))
 
   return (
     <div className="min-h-screen bg-gray-50">
       <PageHeader title="Fees" backHref="/admin/dashboard" homeHref="/admin/dashboard" />
 
       <main className="p-4 max-w-2xl mx-auto pb-28">
-        {/* Summary */}
+        {/* Summary (reflects Month + Batch + Teacher filters) */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-white rounded-xl shadow-sm p-4">
             <p className="text-xs text-gray-500">Outstanding</p>
@@ -225,7 +199,7 @@ export default function FeesPage() {
 
         {/* Actions */}
         <div className="flex gap-2 mb-4">
-          <button onClick={() => { setShowGenerate(true); setGenError(''); setGenMsg('') }}
+          <button onClick={openGenerate}
             className="flex-1 bg-blue-600 text-white text-sm px-3 py-2 rounded-lg hover:bg-blue-700">
             Generate Month
           </button>
@@ -236,13 +210,24 @@ export default function FeesPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex gap-2 mb-4">
-          <select className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white"
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <select className="border rounded-lg px-3 py-2 text-sm bg-white"
+            value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+            <option value={ALL}>All months</option>
+            {monthOptions.map(ym => <option key={ym} value={ym}>{periodLabelFromMonth(ym)}</option>)}
+            <option value={NONE}>One-off charges</option>
+          </select>
+          <select className="border rounded-lg px-3 py-2 text-sm bg-white"
+            value={teacherFilter} onChange={e => setTeacherFilter(e.target.value)}>
+            <option value="">All teachers</option>
+            {teacherOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+          <select className="border rounded-lg px-3 py-2 text-sm bg-white"
             value={batchFilter} onChange={e => setBatchFilter(e.target.value)}>
             <option value="">All batches</option>
             {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
-          <select className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white"
+          <select className="border rounded-lg px-3 py-2 text-sm bg-white"
             value={statusFilter} onChange={e => setStatusFilter(e.target.value as '' | InvoiceStatus)}>
             <option value="">All statuses</option>
             <option value="pending">Pending</option>
@@ -254,70 +239,21 @@ export default function FeesPage() {
 
         {/* Invoice list */}
         <div className="space-y-3">
-          {filtered.map(inv => {
-            const balance = Number(inv.amount) - Number(inv.amount_paid)
-            return (
-              <div key={inv.id} className="bg-white rounded-xl shadow-sm p-4">
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">{inv.students?.name || 'Unknown'}</p>
-                    <p className="text-sm text-gray-500">{inv.period_label}{inv.batches?.name ? ` · ${inv.batches.name}` : ''}</p>
-                    {inv.due_date && <p className="text-xs text-gray-400 mt-0.5">Due {new Date(inv.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ml-2 ${STATUS_PILL[inv.status]}`}>
-                    {inv.status}
-                  </span>
-                </div>
-
-                <div className="flex items-baseline justify-between mt-2 text-sm">
-                  <span className="text-gray-500">
-                    {formatINR(Number(inv.amount_paid))} <span className="text-gray-400">/ {formatINR(Number(inv.amount))}</span>
-                  </span>
-                  {inv.status !== 'waived' && balance > 0 && (
-                    <span className="font-semibold text-orange-600">{formatINR(balance)} due</span>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {inv.status !== 'waived' && inv.status !== 'paid' && (
-                    <button onClick={() => openPayment(inv)}
-                      className="text-xs bg-green-50 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">
-                      Record Payment
-                    </button>
-                  )}
-                  {Number(inv.amount_paid) !== 0 && (
-                    <button onClick={() => openLedger(inv)}
-                      className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg hover:bg-blue-100">
-                      Ledger
-                    </button>
-                  )}
-                  {inv.status !== 'waived' && inv.status !== 'paid' && (
-                    <button onClick={() => setWaivingId(waivingId === inv.id ? null : inv.id)}
-                      className="text-xs bg-gray-50 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-100">
-                      Waive
-                    </button>
-                  )}
-                </div>
-
-                {waivingId === inv.id && (
-                  <div className="mt-3 bg-gray-50 rounded-lg p-3 space-y-2">
-                    <p className="text-xs text-gray-600">Waive this fee? It will be marked settled with no payment due.</p>
-                    <div className="flex gap-2">
-                      <button onClick={() => handleWaive(inv.id)} disabled={actionLoading}
-                        className="flex-1 bg-gray-700 text-white py-1.5 rounded-lg text-xs font-medium disabled:opacity-50">
-                        {actionLoading ? 'Waiving...' : 'Confirm Waive'}
-                      </button>
-                      <button onClick={() => setWaivingId(null)}
-                        className="flex-1 border py-1.5 rounded-lg text-xs text-gray-600">Cancel</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          {filtered.map(inv => (
+            <InvoiceCard key={inv.id} invoice={inv}
+              onRecordPayment={setPayInvoice}
+              onEdit={setEditInvoice}
+              onLedger={setLedgerInvoice}
+              onWaiveClick={setWaivingId}
+              waivingId={waivingId}
+              actionLoading={actionLoading}
+              onConfirmWaive={handleWaive}
+              onCancelWaive={() => setWaivingId(null)}
+            />
+          ))}
           {filtered.length === 0 && (pageLoading
             ? <p className="text-center text-gray-400 py-12">Loading...</p>
-            : <p className="text-center text-gray-400 py-12">No fees yet. Generate a month or add a charge.</p>
+            : <p className="text-center text-gray-400 py-12">No fees for this filter. Generate a month or add a charge.</p>
           )}
         </div>
       </main>
@@ -328,7 +264,7 @@ export default function FeesPage() {
           {genError && <p className="text-red-600 text-sm">{genError}</p>}
           {genMsg && <p className="text-green-600 text-sm">{genMsg}</p>}
 
-          {/* Batch selection: All batches, or pick any number */}
+          {/* Batch selection */}
           <div className="border rounded-lg divide-y">
             <label className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 cursor-pointer">
               <input type="checkbox" checked={genForm.all}
@@ -336,7 +272,7 @@ export default function FeesPage() {
               All batches
             </label>
             {!genForm.all && (
-              <div className="max-h-44 overflow-y-auto">
+              <div className="max-h-40 overflow-y-auto">
                 {batches.map(b => (
                   <label key={b.id} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 cursor-pointer">
                     <input type="checkbox" checked={genForm.batch_ids.includes(b.id)}
@@ -350,6 +286,28 @@ export default function FeesPage() {
             )}
           </div>
 
+          {/* Individual students (optional) */}
+          <div className="border rounded-lg">
+            <p className="px-3 py-2 text-sm font-medium text-gray-700 border-b">
+              Individual students <span className="text-xs text-gray-400 font-normal">(optional{genForm.student_ids.length ? `, ${genForm.student_ids.length} selected` : ''})</span>
+            </p>
+            <div className="p-2">
+              <input className="w-full border rounded-lg px-3 py-1.5 text-sm mb-2" placeholder="Search students…"
+                value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
+              <div className="max-h-40 overflow-y-auto">
+                {genStudentList.map(s => (
+                  <label key={s.id} className="flex items-center gap-2 px-1 py-1.5 text-sm text-gray-700 cursor-pointer">
+                    <input type="checkbox" checked={genForm.student_ids.includes(s.id)}
+                      onChange={() => toggleGenStudent(s.id)} />
+                    <span className="flex-1">{s.name}</span>
+                    {s.batches?.name && <span className="text-xs text-gray-400">{s.batches.name}</span>}
+                  </label>
+                ))}
+                {genStudentList.length === 0 && <p className="px-1 py-1.5 text-xs text-gray-400">No matching students.</p>}
+              </div>
+            </div>
+          </div>
+
           <input type="month" className="w-full border rounded-lg px-3 py-2 text-sm" required
             value={genForm.period_month} onChange={e => setGenForm({ ...genForm, period_month: e.target.value })} />
           <input inputMode="numeric" className="w-full border rounded-lg px-3 py-2 text-sm"
@@ -360,7 +318,7 @@ export default function FeesPage() {
             <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm"
               value={genForm.due_date} onChange={e => setGenForm({ ...genForm, due_date: e.target.value })} />
           </div>
-          <p className="text-xs text-gray-400">Creates one invoice per student across the selected batch(es). Students already invoiced for this month are skipped.</p>
+          <p className="text-xs text-gray-400">Creates one invoice per student across the selected batch(es) and/or students. Students already invoiced for this month are skipped.</p>
           <button type="submit" disabled={genLoading}
             className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-50 mt-2">
             {genLoading ? 'Generating...' : 'Generate'}
@@ -395,68 +353,20 @@ export default function FeesPage() {
         </form>
       </BottomSheet>
 
-      {/* Record Payment Sheet */}
-      <BottomSheet open={payInvoice !== null} onClose={() => setPayInvoice(null)} title="Record Payment">
-        {payInvoice && (
-          <form onSubmit={handlePayment} className="space-y-3">
-            {payError && <p className="text-red-600 text-sm">{payError}</p>}
-            <div className="bg-gray-50 rounded-lg p-3 text-sm">
-              <p className="font-medium text-gray-900">{payInvoice.students?.name}</p>
-              <p className="text-gray-500">{payInvoice.period_label} · Balance {formatINR(Number(payInvoice.amount) - Number(payInvoice.amount_paid))}</p>
-            </div>
-            <input inputMode="numeric" className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Amount received (₹)" required
-              value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} />
-            <select className="w-full border rounded-lg px-3 py-2 text-sm"
-              value={payForm.mode} onChange={e => setPayForm({ ...payForm, mode: e.target.value as PaymentMode })}>
-              {PAYMENT_MODES.map(m => <option key={m} value={m}>{m.toUpperCase()}</option>)}
-            </select>
-            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Reference (UPI ref / cheque no.)"
-              value={payForm.reference} onChange={e => setPayForm({ ...payForm, reference: e.target.value })} />
-            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Note (optional)"
-              value={payForm.note} onChange={e => setPayForm({ ...payForm, note: e.target.value })} />
-            <p className="text-xs text-gray-400">Tip: enter a negative amount to reverse/correct an earlier payment.</p>
-            <button type="submit" disabled={payLoading}
-              className="w-full bg-green-600 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-50 mt-2">
-              {payLoading ? 'Saving...' : 'Save Payment'}
-            </button>
-          </form>
-        )}
-      </BottomSheet>
-
-      {/* Ledger Sheet */}
-      <BottomSheet open={ledgerFor !== null} onClose={() => setLedgerFor(null)} title="Payment Ledger">
-        {ledgerFor && (
-          <div className="space-y-3">
-            <div className="bg-gray-50 rounded-lg p-3 text-sm">
-              <p className="font-medium text-gray-900">{ledgerFor.students?.name}</p>
-              <p className="text-gray-500">{ledgerFor.period_label}</p>
-            </div>
-            {ledgerLoading ? (
-              <p className="text-center text-gray-400 py-6 text-sm">Loading...</p>
-            ) : ledger.length === 0 ? (
-              <p className="text-center text-gray-400 py-6 text-sm">No payments recorded.</p>
-            ) : (
-              <ul className="space-y-2">
-                {ledger.map(p => (
-                  <li key={p.id} className="flex items-center justify-between border-b border-gray-100 pb-2">
-                    <div>
-                      <p className={`text-sm font-medium ${Number(p.amount) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                        {formatINR(Number(p.amount))} <span className="text-xs text-gray-400 uppercase">{p.mode}</span>
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {new Date(p.paid_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        {p.reference ? ` · ${p.reference}` : ''}
-                        {p.recorded_by_role ? ` · by ${p.recorded_by_role}` : ''}
-                      </p>
-                      {p.note && <p className="text-xs text-gray-400">{p.note}</p>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </BottomSheet>
+      {payInvoice && (
+        <RecordPaymentSheet key={payInvoice.id} invoice={payInvoice}
+          onClose={() => setPayInvoice(null)}
+          onSaved={() => { setPayInvoice(null); load() }} />
+      )}
+      {editInvoice && (
+        <EditInvoiceSheet key={editInvoice.id} invoice={editInvoice}
+          onClose={() => setEditInvoice(null)}
+          onSaved={() => { setEditInvoice(null); load() }} />
+      )}
+      {ledgerInvoice && (
+        <LedgerSheet key={ledgerInvoice.id} invoice={ledgerInvoice}
+          onClose={() => setLedgerInvoice(null)} />
+      )}
 
       <AdminBottomNav />
     </div>

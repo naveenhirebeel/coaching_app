@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAuthUser, getSuperAdminUser, isApprovedInstitute } from '@/lib/auth'
-import { recomputeInvoice, PAYMENT_MODES, PaymentMode } from '@/lib/fees'
+import { recomputeInvoice, PAYMENT_MODES, PaymentMode, getTeacherBatchIds } from '@/lib/fees'
 import { logActivity } from '@/lib/activity'
 
 // GET /api/fees/payments — ledger for the caller's institute.
@@ -28,6 +28,20 @@ export async function GET(req: NextRequest) {
     .select('*, students(name), fee_invoices(period_label)')
     .eq('institute_id', instituteId)
     .order('paid_at', { ascending: false })
+
+  // Teachers only see payments for students in batches assigned to them.
+  if (user.role === 'teacher' && 'id' in user) {
+    const myBatchIds = await getTeacherBatchIds(user.id as string, instituteId)
+    if (myBatchIds.length === 0) return NextResponse.json([])
+    const { data: myStudents } = await supabaseAdmin
+      .from('students')
+      .select('id')
+      .eq('institute_id', instituteId)
+      .in('batch_id', myBatchIds)
+    const studentIds = (myStudents || []).map(s => s.id)
+    if (studentIds.length === 0) return NextResponse.json([])
+    query = query.in('student_id', studentIds)
+  }
 
   const invoiceId = searchParams.get('invoice_id')
   const studentId = searchParams.get('student_id')
@@ -65,11 +79,19 @@ export async function POST(req: NextRequest) {
   // Invoice must belong to the caller's institute.
   const { data: invoice } = await supabaseAdmin
     .from('fee_invoices')
-    .select('id, student_id, period_label, students(name)')
+    .select('id, student_id, batch_id, period_label, students(name)')
     .eq('id', invoice_id)
     .eq('institute_id', user.institute_id)
     .single()
   if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+
+  // Teachers may only record payments for invoices in their own batches.
+  if (user.role === 'teacher') {
+    const myBatchIds = await getTeacherBatchIds(user.id, user.institute_id)
+    if (!invoice.batch_id || !myBatchIds.includes(invoice.batch_id)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
 
   const { data: payment, error } = await supabaseAdmin
     .from('fee_payments')

@@ -35,6 +35,18 @@ export function deriveStatus(amount: number, amountPaid: number): InvoiceStatus 
   return 'partial'
 }
 
+// Batch ids assigned to a teacher, used to scope teacher access to fees/payments
+// (a teacher may only see and act on invoices for their own batches).
+export async function getTeacherBatchIds(teacherId: string, instituteId: string): Promise<string[]> {
+  const { supabaseAdmin } = await import('@/lib/supabase')
+  const { data } = await supabaseAdmin
+    .from('batches')
+    .select('id')
+    .eq('institute_id', instituteId)
+    .eq('teacher_id', teacherId)
+  return (data || []).map(b => b.id)
+}
+
 // Recompute an invoice's amount_paid + status from its payment ledger. Called
 // after every payment insert. Returns the new values, or null if not found.
 export async function recomputeInvoice(

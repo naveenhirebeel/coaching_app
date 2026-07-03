@@ -3,86 +3,82 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PageHeader from '@/components/PageHeader'
 import TeacherBottomNav from '@/components/TeacherBottomNav'
-import BottomSheet from '@/components/BottomSheet'
-import { formatINR, PAYMENT_MODES, type InvoiceStatus, type PaymentMode } from '@/lib/fees'
+import InvoiceCard from '@/components/fees/InvoiceCard'
+import RecordPaymentSheet from '@/components/fees/RecordPaymentSheet'
+import EditInvoiceSheet from '@/components/fees/EditInvoiceSheet'
+import LedgerSheet from '@/components/fees/LedgerSheet'
+import { FeeInvoice } from '@/components/fees/types'
+import { formatINR, periodLabelFromMonth, type InvoiceStatus } from '@/lib/fees'
 
-type Invoice = {
-  id: string
-  student_id: string
-  batch_id: string | null
-  period_label: string
-  amount: number
-  amount_paid: number
-  due_date: string | null
-  status: InvoiceStatus
-  students?: { name: string }
-  batches?: { name: string; subject: string }
+const ALL = '__all__'
+const NONE = '__none__'
+
+function currentMonth() {
+  return new Date().toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', timeZone: 'Asia/Kolkata' }).slice(0, 7)
 }
-type Batch = { id: string; name: string }
-
-const STATUS_PILL: Record<InvoiceStatus, string> = {
-  pending: 'bg-orange-100 text-orange-700',
-  partial: 'bg-amber-100 text-amber-700',
-  paid: 'bg-green-100 text-green-700',
-  waived: 'bg-gray-100 text-gray-500',
+function ymOf(dateStr: string | null): string | null {
+  return dateStr ? dateStr.slice(0, 7) : null
 }
 
 export default function TeacherFeesPage() {
   const router = useRouter()
-  const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [batches, setBatches] = useState<Batch[]>([])
+  const [invoices, setInvoices] = useState<FeeInvoice[]>([])
   const [pageLoading, setPageLoading] = useState(true)
-  const [batchFilter, setBatchFilter] = useState('')
-  const [onlyDue, setOnlyDue] = useState(true)
 
-  const [payInvoice, setPayInvoice] = useState<Invoice | null>(null)
-  const [payForm, setPayForm] = useState({ amount: '', mode: 'cash' as PaymentMode, reference: '', note: '' })
-  const [payLoading, setPayLoading] = useState(false)
-  const [payError, setPayError] = useState('')
+  const [monthFilter, setMonthFilter] = useState<string>(currentMonth())
+  const [batchFilter, setBatchFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'' | InvoiceStatus>('')
+
+  const [payInvoice, setPayInvoice] = useState<FeeInvoice | null>(null)
+  const [editInvoice, setEditInvoice] = useState<FeeInvoice | null>(null)
+  const [ledgerInvoice, setLedgerInvoice] = useState<FeeInvoice | null>(null)
+  const [waivingId, setWaivingId] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
 
   function getToken() { return localStorage.getItem('token') || '' }
 
   async function load() {
-    const [iRes, bRes] = await Promise.all([
-      fetch('/api/fees', { headers: { Authorization: `Bearer ${getToken()}` } }),
-      fetch('/api/batches', { headers: { Authorization: `Bearer ${getToken()}` } }),
-    ])
-    if (iRes.status === 401) return router.push('/teacher/login')
-    setInvoices(await iRes.json())
-    setBatches((await bRes.json()).map((b: Batch) => ({ id: b.id, name: b.name })))
+    const res = await fetch('/api/fees', { headers: { Authorization: `Bearer ${getToken()}` } })
+    if (res.status === 401) return router.push('/teacher/login')
+    setInvoices(await res.json())
     setPageLoading(false)
   }
 
-  // Load on mount. setState runs after awaits (not synchronously) — the
-  // react-hooks/set-state-in-effect heuristic false-positives on this idiom.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [])
 
-  const filtered = invoices.filter(i =>
-    (!batchFilter || i.batch_id === batchFilter) &&
-    (!onlyDue || (i.status === 'pending' || i.status === 'partial'))
-  )
+  // Batch + month options derived from the teacher's own (server-scoped) invoices.
+  const batchMap = new Map<string, string>()
+  invoices.forEach(i => { if (i.batch_id && i.batches?.name) batchMap.set(i.batch_id, i.batches.name) })
+  const batchOptions = Array.from(batchMap.entries())
 
-  function openPayment(inv: Invoice) {
-    setPayInvoice(inv)
-    const balance = Number(inv.amount) - Number(inv.amount_paid)
-    setPayForm({ amount: balance > 0 ? String(balance) : '', mode: 'cash', reference: '', note: '' })
-    setPayError('')
+  const monthSet = new Set<string>([currentMonth()])
+  invoices.forEach(i => { const ym = ymOf(i.period_month); if (ym) monthSet.add(ym) })
+  const monthOptions = Array.from(monthSet).sort().reverse()
+
+  function matchesMonth(i: FeeInvoice) {
+    if (monthFilter === ALL) return true
+    if (monthFilter === NONE) return !i.period_month
+    return ymOf(i.period_month) === monthFilter
   }
 
-  async function handlePayment(e: React.FormEvent) {
-    e.preventDefault()
-    if (!payInvoice) return
-    setPayLoading(true); setPayError('')
-    const res = await fetch('/api/fees/payments', {
-      method: 'POST',
+  const scopeFiltered = invoices.filter(i => matchesMonth(i) && (!batchFilter || i.batch_id === batchFilter))
+  const filtered = scopeFiltered.filter(i => !statusFilter || i.status === statusFilter)
+
+  const outstanding = scopeFiltered
+    .filter(i => i.status !== 'waived')
+    .reduce((sum, i) => sum + (Number(i.amount) - Number(i.amount_paid)), 0)
+  const collected = scopeFiltered.reduce((sum, i) => sum + Number(i.amount_paid), 0)
+
+  async function handleWaive(id: string) {
+    setActionLoading(true)
+    await fetch('/api/fees', {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ invoice_id: payInvoice.id, ...payForm }),
+      body: JSON.stringify({ id, action: 'waive' }),
     })
-    const data = await res.json()
-    setPayLoading(false)
-    if (!res.ok) return setPayError(data.error)
-    setPayInvoice(null)
+    setActionLoading(false)
+    setWaivingId(null)
     load()
   }
 
@@ -91,82 +87,76 @@ export default function TeacherFeesPage() {
       <PageHeader title="Fees" backHref="/teacher/dashboard" homeHref="/teacher/dashboard" />
 
       <main className="p-4 max-w-xl mx-auto pb-28">
-        <div className="flex gap-2 mb-4">
-          <select className="flex-1 border rounded-lg px-3 py-2 text-sm bg-white"
-            value={batchFilter} onChange={e => setBatchFilter(e.target.value)}>
-            <option value="">All batches</option>
-            {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-          <button onClick={() => setOnlyDue(!onlyDue)}
-            className={`text-sm px-3 py-2 rounded-lg border ${onlyDue ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600'}`}>
-            {onlyDue ? 'Due only' : 'All'}
-          </button>
+        {/* Summary (reflects Month + Batch filters) */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <p className="text-xs text-gray-500">Outstanding</p>
+            <p className="text-xl font-bold text-orange-600">{formatINR(outstanding)}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4">
+            <p className="text-xs text-gray-500">Collected</p>
+            <p className="text-xl font-bold text-green-600">{formatINR(collected)}</p>
+          </div>
         </div>
 
+        {/* Filters */}
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <select className="border rounded-lg px-3 py-2 text-sm bg-white"
+            value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+            <option value={ALL}>All months</option>
+            {monthOptions.map(ym => <option key={ym} value={ym}>{periodLabelFromMonth(ym)}</option>)}
+            <option value={NONE}>One-off charges</option>
+          </select>
+          <select className="border rounded-lg px-3 py-2 text-sm bg-white"
+            value={batchFilter} onChange={e => setBatchFilter(e.target.value)}>
+            <option value="">All batches</option>
+            {batchOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+          <select className="col-span-2 border rounded-lg px-3 py-2 text-sm bg-white"
+            value={statusFilter} onChange={e => setStatusFilter(e.target.value as '' | InvoiceStatus)}>
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="partial">Partial</option>
+            <option value="paid">Paid</option>
+            <option value="waived">Waived</option>
+          </select>
+        </div>
+
+        {/* Invoice list */}
         <div className="space-y-3">
-          {filtered.map(inv => {
-            const balance = Number(inv.amount) - Number(inv.amount_paid)
-            return (
-              <div key={inv.id} className="bg-white rounded-xl shadow-sm p-4">
-                <div className="flex items-start justify-between">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">{inv.students?.name || 'Unknown'}</p>
-                    <p className="text-sm text-gray-500">{inv.period_label}{inv.batches?.name ? ` · ${inv.batches.name}` : ''}</p>
-                    {inv.due_date && <p className="text-xs text-gray-400 mt-0.5">Due {new Date(inv.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ml-2 ${STATUS_PILL[inv.status]}`}>
-                    {inv.status}
-                  </span>
-                </div>
-                <div className="flex items-baseline justify-between mt-2 text-sm">
-                  <span className="text-gray-500">
-                    {formatINR(Number(inv.amount_paid))} <span className="text-gray-400">/ {formatINR(Number(inv.amount))}</span>
-                  </span>
-                  {inv.status !== 'waived' && balance > 0 && (
-                    <span className="font-semibold text-orange-600">{formatINR(balance)} due</span>
-                  )}
-                </div>
-                {inv.status !== 'waived' && inv.status !== 'paid' && (
-                  <button onClick={() => openPayment(inv)}
-                    className="mt-3 text-xs bg-green-50 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 font-medium">
-                    Record Payment
-                  </button>
-                )}
-              </div>
-            )
-          })}
+          {filtered.map(inv => (
+            <InvoiceCard key={inv.id} invoice={inv}
+              onRecordPayment={setPayInvoice}
+              onEdit={setEditInvoice}
+              onLedger={setLedgerInvoice}
+              onWaiveClick={setWaivingId}
+              waivingId={waivingId}
+              actionLoading={actionLoading}
+              onConfirmWaive={handleWaive}
+              onCancelWaive={() => setWaivingId(null)}
+            />
+          ))}
           {filtered.length === 0 && (pageLoading
             ? <p className="text-center text-gray-400 py-12">Loading...</p>
-            : <p className="text-center text-gray-400 py-12">No dues to show.</p>
+            : <p className="text-center text-gray-400 py-12">No fees to show.</p>
           )}
         </div>
       </main>
 
-      <BottomSheet open={payInvoice !== null} onClose={() => setPayInvoice(null)} title="Record Payment">
-        {payInvoice && (
-          <form onSubmit={handlePayment} className="space-y-3">
-            {payError && <p className="text-red-600 text-sm">{payError}</p>}
-            <div className="bg-gray-50 rounded-lg p-3 text-sm">
-              <p className="font-medium text-gray-900">{payInvoice.students?.name}</p>
-              <p className="text-gray-500">{payInvoice.period_label} · Balance {formatINR(Number(payInvoice.amount) - Number(payInvoice.amount_paid))}</p>
-            </div>
-            <input inputMode="numeric" className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Amount received (₹)" required
-              value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} />
-            <select className="w-full border rounded-lg px-3 py-2 text-sm"
-              value={payForm.mode} onChange={e => setPayForm({ ...payForm, mode: e.target.value as PaymentMode })}>
-              {PAYMENT_MODES.map(m => <option key={m} value={m}>{m.toUpperCase()}</option>)}
-            </select>
-            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Reference (UPI ref / cheque no.)"
-              value={payForm.reference} onChange={e => setPayForm({ ...payForm, reference: e.target.value })} />
-            <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Note (optional)"
-              value={payForm.note} onChange={e => setPayForm({ ...payForm, note: e.target.value })} />
-            <button type="submit" disabled={payLoading}
-              className="w-full bg-green-600 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-50 mt-2">
-              {payLoading ? 'Saving...' : 'Save Payment'}
-            </button>
-          </form>
-        )}
-      </BottomSheet>
+      {payInvoice && (
+        <RecordPaymentSheet key={payInvoice.id} invoice={payInvoice}
+          onClose={() => setPayInvoice(null)}
+          onSaved={() => { setPayInvoice(null); load() }} />
+      )}
+      {editInvoice && (
+        <EditInvoiceSheet key={editInvoice.id} invoice={editInvoice}
+          onClose={() => setEditInvoice(null)}
+          onSaved={() => { setEditInvoice(null); load() }} />
+      )}
+      {ledgerInvoice && (
+        <LedgerSheet key={ledgerInvoice.id} invoice={ledgerInvoice}
+          onClose={() => setLedgerInvoice(null)} />
+      )}
 
       <TeacherBottomNav />
     </div>
