@@ -49,7 +49,7 @@ export default function EditInvoiceSheet({
         </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Due date (optional)</label>
-          <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm"
+          <input type="date" className="w-full min-w-0 appearance-none border rounded-lg px-3 py-2 text-sm"
             value={dueDate} onChange={e => setDueDate(e.target.value)} />
         </div>
         <p className="text-xs text-gray-400">Changing the amount updates the status (e.g. Paid → Partial) automatically.</p>

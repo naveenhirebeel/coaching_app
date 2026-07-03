@@ -308,14 +308,14 @@ export default function FeesPage() {
             </div>
           </div>
 
-          <input type="month" className="w-full border rounded-lg px-3 py-2 text-sm" required
+          <input type="month" className="w-full min-w-0 appearance-none border rounded-lg px-3 py-2 text-sm" required
             value={genForm.period_month} onChange={e => setGenForm({ ...genForm, period_month: e.target.value })} />
           <input inputMode="numeric" className="w-full border rounded-lg px-3 py-2 text-sm"
             placeholder="Amount per student (₹) — blank uses each batch's monthly fee"
             value={genForm.amount} onChange={e => setGenForm({ ...genForm, amount: e.target.value })} />
           <div>
             <label className="block text-xs text-gray-500 mb-1">Due date (optional)</label>
-            <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm"
+            <input type="date" className="w-full min-w-0 appearance-none border rounded-lg px-3 py-2 text-sm"
               value={genForm.due_date} onChange={e => setGenForm({ ...genForm, due_date: e.target.value })} />
           </div>
           <p className="text-xs text-gray-400">Creates one invoice per student across the selected batch(es) and/or students. Students already invoiced for this month are skipped.</p>
@@ -341,7 +341,7 @@ export default function FeesPage() {
             value={chargeForm.amount} onChange={e => setChargeForm({ ...chargeForm, amount: e.target.value })} />
           <div>
             <label className="block text-xs text-gray-500 mb-1">Due date (optional)</label>
-            <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm"
+            <input type="date" className="w-full min-w-0 appearance-none border rounded-lg px-3 py-2 text-sm"
               value={chargeForm.due_date} onChange={e => setChargeForm({ ...chargeForm, due_date: e.target.value })} />
           </div>
           <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Notes (optional)"

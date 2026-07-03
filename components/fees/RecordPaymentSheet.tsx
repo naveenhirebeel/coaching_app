@@ -68,7 +68,7 @@ export default function RecordPaymentSheet({
         </select>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Received on</label>
-          <input type="datetime-local" className="w-full border rounded-lg px-3 py-2 text-sm"
+          <input type="datetime-local" className="w-full min-w-0 appearance-none border rounded-lg px-3 py-2 text-sm"
             value={paidAt} onChange={e => setPaidAt(e.target.value)} />
         </div>
         <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Reference (UPI ref / cheque no.)"
