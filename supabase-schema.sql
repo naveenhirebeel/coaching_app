@@ -38,6 +38,7 @@ create table batches (
   subject text not null,
   schedule text,
   schedule_slots jsonb default '[]', -- e.g. [{"day":"Mon","start":"16:00","end":"17:00"}]
+  monthly_fee numeric(10, 2), -- default fee used when generating monthly invoices for this batch
   created_at timestamptz default now()
 );
 
@@ -71,7 +72,7 @@ create table attendance (
 create table activity_logs (
   id uuid primary key default gen_random_uuid(),
   institute_id uuid not null references institutes(id) on delete cascade,
-  event_type text not null check (event_type in ('attendance_marked', 'attendance_exit', 'student_enrolled', 'student_deleted', 'teacher_added', 'teacher_deleted', 'batch_created', 'batch_deleted', 'telegram_sent', 'telegram_failed')),
+  event_type text not null check (event_type in ('attendance_marked', 'attendance_exit', 'student_enrolled', 'student_deleted', 'teacher_added', 'teacher_deleted', 'batch_created', 'batch_deleted', 'telegram_sent', 'telegram_failed', 'fee_charged', 'fee_paid', 'fee_waived')),
   actor_type text not null check (actor_type in ('admin', 'teacher', 'system')), -- who triggered the action
   actor_id text, -- admin/teacher user id or 'system' for automated
   entity_type text, -- what was affected: student, batch, teacher, attendance
@@ -88,6 +89,50 @@ create table parent_report_requests (
   created_at timestamptz default now(),
   unique(chat_id, requested_date)
 );
+
+-- Fee charges owed by a student. One row per billing period (recurring monthly)
+-- or per ad-hoc charge. amount_paid is a denormalized running total kept in sync
+-- from the fee_payments ledger (see recomputeInvoice in lib/fees.ts).
+create table fee_invoices (
+  id uuid primary key default gen_random_uuid(),
+  institute_id uuid not null references institutes(id) on delete cascade,
+  student_id uuid not null references students(id) on delete cascade,
+  batch_id uuid references batches(id) on delete set null, -- preserve fee history if batch deleted
+  period_label text not null, -- human-readable, e.g. "July 2026" or "Admission Fee"
+  period_month date, -- first day of the billed month for recurring invoices; null for ad-hoc charges
+  amount numeric(10, 2) not null check (amount >= 0),
+  amount_paid numeric(10, 2) not null default 0 check (amount_paid >= 0),
+  due_date date,
+  status text not null default 'pending' check (status in ('pending', 'partial', 'paid', 'waived')),
+  notes text,
+  created_at timestamptz default now()
+);
+
+-- One recurring invoice per student per month; ad-hoc charges (period_month null) are unconstrained.
+create unique index fee_invoices_student_month_uniq
+  on fee_invoices (student_id, period_month) where period_month is not null;
+create index fee_invoices_institute_status_idx on fee_invoices (institute_id, status);
+
+-- Append-only ledger of money received against an invoice. Corrections are made
+-- by inserting a negative-amount reversal row, never by editing/deleting, so the
+-- ledger stays a complete audit trail.
+create table fee_payments (
+  id uuid primary key default gen_random_uuid(),
+  institute_id uuid not null references institutes(id) on delete cascade,
+  invoice_id uuid not null references fee_invoices(id) on delete cascade,
+  student_id uuid not null references students(id) on delete cascade,
+  amount numeric(10, 2) not null, -- may be negative for a reversal
+  mode text not null check (mode in ('cash', 'upi', 'card', 'bank', 'cheque')),
+  reference text, -- UPI ref / cheque no. / txn id
+  note text,
+  recorded_by text, -- admin/teacher user id from token
+  recorded_by_role text check (recorded_by_role in ('admin', 'teacher')),
+  paid_at timestamptz default now(),
+  created_at timestamptz default now()
+);
+
+create index fee_payments_invoice_idx on fee_payments (invoice_id);
+create index fee_payments_institute_idx on fee_payments (institute_id, paid_at desc);
 
 create table telegram_message_log (
   id uuid primary key default gen_random_uuid(),
@@ -197,3 +242,46 @@ create table telegram_message_log (
 -- alter table telegram_message_log add column if not exists telegram_message_id bigint;
 -- alter table telegram_message_log add column if not exists acknowledged_at timestamptz;
 -- alter table telegram_message_log add column if not exists acknowledged_by_chat_id text;
+
+-- 14. Fee collection module (invoices + payment ledger)
+-- alter table batches add column if not exists monthly_fee numeric(10, 2);
+--
+-- create table if not exists fee_invoices (
+--   id uuid primary key default gen_random_uuid(),
+--   institute_id uuid not null references institutes(id) on delete cascade,
+--   student_id uuid not null references students(id) on delete cascade,
+--   batch_id uuid references batches(id) on delete set null,
+--   period_label text not null,
+--   period_month date,
+--   amount numeric(10, 2) not null check (amount >= 0),
+--   amount_paid numeric(10, 2) not null default 0 check (amount_paid >= 0),
+--   due_date date,
+--   status text not null default 'pending' check (status in ('pending', 'partial', 'paid', 'waived')),
+--   notes text,
+--   created_at timestamptz default now()
+-- );
+-- create unique index if not exists fee_invoices_student_month_uniq
+--   on fee_invoices (student_id, period_month) where period_month is not null;
+-- create index if not exists fee_invoices_institute_status_idx on fee_invoices (institute_id, status);
+--
+-- create table if not exists fee_payments (
+--   id uuid primary key default gen_random_uuid(),
+--   institute_id uuid not null references institutes(id) on delete cascade,
+--   invoice_id uuid not null references fee_invoices(id) on delete cascade,
+--   student_id uuid not null references students(id) on delete cascade,
+--   amount numeric(10, 2) not null,
+--   mode text not null check (mode in ('cash', 'upi', 'card', 'bank', 'cheque')),
+--   reference text,
+--   note text,
+--   recorded_by text,
+--   recorded_by_role text check (recorded_by_role in ('admin', 'teacher')),
+--   paid_at timestamptz default now(),
+--   created_at timestamptz default now()
+-- );
+-- create index if not exists fee_payments_invoice_idx on fee_payments (invoice_id);
+-- create index if not exists fee_payments_institute_idx on fee_payments (institute_id, paid_at desc);
+
+-- 15. Fee audit events in activity_logs
+-- alter table activity_logs drop constraint if exists activity_logs_event_type_check;
+-- alter table activity_logs add constraint activity_logs_event_type_check
+--   check (event_type in ('attendance_marked', 'attendance_exit', 'student_enrolled', 'student_deleted', 'teacher_added', 'teacher_deleted', 'batch_created', 'batch_deleted', 'telegram_sent', 'telegram_failed', 'fee_charged', 'fee_paid', 'fee_waived'));

@@ -26,6 +26,7 @@ export default function AdminDashboard() {
     { label: 'Batches', desc: 'Manage class batches and schedules', href: '/admin/batches', color: 'bg-blue-500' },
     { label: 'Teachers', desc: 'Add and manage teachers', href: '/admin/teachers', color: 'bg-purple-500' },
     { label: 'Students', desc: 'Enroll and manage students', href: '/admin/students', color: 'bg-green-500' },
+    { label: 'Fees', desc: 'Collect fees and track dues', href: '/admin/fees', color: 'bg-teal-500' },
     { label: 'Reports', desc: 'View attendance reports', href: '/admin/reports', color: 'bg-orange-500' },
     { label: 'Attendance Correction', desc: 'Fix or delete wrong attendance entries', href: '/admin/attendance', color: 'bg-red-500' },
   ]
