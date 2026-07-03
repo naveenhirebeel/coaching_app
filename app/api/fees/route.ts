@@ -55,63 +55,94 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
 
   if (body.generate) {
-    const { batch_id, period_month, due_date } = body
-    if (!batch_id || !period_month) {
-      return NextResponse.json({ error: 'batch_id and period_month are required' }, { status: 400 })
+    const { period_month, due_date } = body
+    if (!period_month) {
+      return NextResponse.json({ error: 'period_month is required' }, { status: 400 })
     }
 
-    const { data: batch } = await supabaseAdmin
+    // Resolve the target batches: every batch in the institute when `all` is set,
+    // otherwise the provided list (batch_ids), with batch_id kept for compat.
+    let batchIds: string[] = []
+    if (body.all) {
+      const { data } = await supabaseAdmin.from('batches').select('id').eq('institute_id', user.institute_id)
+      batchIds = (data || []).map(b => b.id)
+    } else if (Array.isArray(body.batch_ids)) {
+      batchIds = body.batch_ids.filter(Boolean)
+    } else if (body.batch_id) {
+      batchIds = [body.batch_id]
+    }
+    if (batchIds.length === 0) {
+      return NextResponse.json({ error: 'Select at least one batch' }, { status: 400 })
+    }
+
+    // Explicit amount (when given) overrides every batch's own monthly_fee.
+    const overrideAmount = body.amount != null && body.amount !== '' ? Number(body.amount) : null
+    if (overrideAmount != null && (Number.isNaN(overrideAmount) || overrideAmount < 0)) {
+      return NextResponse.json({ error: 'Amount must be a non-negative number' }, { status: 400 })
+    }
+
+    const { data: batches } = await supabaseAdmin
       .from('batches')
       .select('id, name, monthly_fee')
-      .eq('id', batch_id)
       .eq('institute_id', user.institute_id)
-      .single()
-    if (!batch) return NextResponse.json({ error: 'Batch not found' }, { status: 404 })
-
-    const amount = body.amount != null ? Number(body.amount) : batch.monthly_fee != null ? Number(batch.monthly_fee) : null
-    if (amount == null || Number.isNaN(amount) || amount < 0) {
-      return NextResponse.json({ error: 'Provide an amount or set a monthly fee on the batch' }, { status: 400 })
-    }
-
-    const { data: students } = await supabaseAdmin
-      .from('students')
-      .select('id')
-      .eq('batch_id', batch_id)
-      .eq('institute_id', user.institute_id)
-    if (!students || students.length === 0) {
-      return NextResponse.json({ error: 'No students in this batch' }, { status: 400 })
+      .in('id', batchIds)
+    if (!batches || batches.length === 0) {
+      return NextResponse.json({ error: 'No matching batches found' }, { status: 404 })
     }
 
     const monthDate = firstOfMonth(period_month)
     const periodLabel = periodLabelFromMonth(period_month)
 
-    // Skip students who already have an invoice for this month.
-    const { data: existing } = await supabaseAdmin
-      .from('fee_invoices')
-      .select('student_id')
-      .eq('batch_id', batch_id)
-      .eq('period_month', monthDate)
-    const already = new Set((existing || []).map(e => e.student_id))
+    const rows: Record<string, unknown>[] = []
+    const details: { batch_id: string; name: string; created: number; skipped: number; error?: string }[] = []
+    let totalSkipped = 0
 
-    const rows = students
-      .filter(s => !already.has(s.id))
-      .map(s => ({
-        institute_id: user.institute_id,
-        student_id: s.id,
-        batch_id,
-        period_label: periodLabel,
-        period_month: monthDate,
-        amount,
-        due_date: due_date || null,
-        status: 'pending',
-      }))
+    for (const batch of batches) {
+      const amount = overrideAmount != null ? overrideAmount : batch.monthly_fee != null ? Number(batch.monthly_fee) : null
+      if (amount == null || Number.isNaN(amount) || amount < 0) {
+        details.push({ batch_id: batch.id, name: batch.name, created: 0, skipped: 0, error: 'no amount or monthly fee' })
+        continue
+      }
 
-    if (rows.length === 0) {
-      return NextResponse.json({ created: 0, skipped: already.size, message: 'All students already invoiced for this month' })
+      const { data: students } = await supabaseAdmin
+        .from('students')
+        .select('id')
+        .eq('batch_id', batch.id)
+        .eq('institute_id', user.institute_id)
+      if (!students || students.length === 0) {
+        details.push({ batch_id: batch.id, name: batch.name, created: 0, skipped: 0, error: 'no students' })
+        continue
+      }
+
+      // Skip students who already have an invoice for this month.
+      const { data: existing } = await supabaseAdmin
+        .from('fee_invoices')
+        .select('student_id')
+        .eq('batch_id', batch.id)
+        .eq('period_month', monthDate)
+      const already = new Set((existing || []).map(e => e.student_id))
+
+      const newStudents = students.filter(s => !already.has(s.id))
+      for (const s of newStudents) {
+        rows.push({
+          institute_id: user.institute_id,
+          student_id: s.id,
+          batch_id: batch.id,
+          period_label: periodLabel,
+          period_month: monthDate,
+          amount,
+          due_date: due_date || null,
+          status: 'pending',
+        })
+      }
+      totalSkipped += already.size
+      details.push({ batch_id: batch.id, name: batch.name, created: newStudents.length, skipped: already.size })
     }
 
-    const { data: inserted, error } = await supabaseAdmin.from('fee_invoices').insert(rows).select('id')
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (rows.length > 0) {
+      const { error } = await supabaseAdmin.from('fee_invoices').insert(rows)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
     logActivity({
       instituteId: user.institute_id,
@@ -119,12 +150,11 @@ export async function POST(req: NextRequest) {
       actorType: 'admin',
       actorId: user.id,
       entityType: 'batch',
-      entityId: batch_id,
-      entityName: batch.name,
-      details: { period: periodLabel, amount, count: inserted?.length ?? 0 },
+      entityName: batches.length === 1 ? batches[0].name : `${batches.length} batches`,
+      details: { period: periodLabel, count: rows.length, batches: batches.length },
     }).catch(console.error)
 
-    return NextResponse.json({ created: inserted?.length ?? 0, skipped: already.size })
+    return NextResponse.json({ created: rows.length, skipped: totalSkipped, details })
   }
 
   // Single ad-hoc charge

@@ -2,7 +2,7 @@
 
 ## What is this app?
 
-CoachingBuddy is a coaching institute management system. It lets institute admins manage teachers, batches, and students, while teachers can mark daily attendance and send alerts to parents via Telegram.
+CoachingBuddy is a coaching institute management system. It lets institute admins manage teachers, batches, students, and fee collection, while teachers can mark daily attendance, record fee payments, and send alerts to parents via Telegram.
 
 ---
 
@@ -16,7 +16,7 @@ The app is hosted at:
 |------|-----------|
 | Admin | https://coaching-app-ebon.vercel.app/admin/login |
 | Teacher | https://coaching-app-ebon.vercel.app/teacher/login |
-| New Institute Registration | https://coaching-app-ebon.vercel.app/register |
+| New Institute Registration | https://coaching-app-ebon.vercel.app/admin/register |
 | Super Admin | https://coaching-app-ebon.vercel.app/super-admin/login |
 
 ---
@@ -107,7 +107,7 @@ App runs at `http://localhost:3000`
 ### Step 1 — Register your Institute
 - Go to `/admin/register`
 - Fill in institute name, phone, email, password
-- This creates your account
+- This creates your account (a Super Admin must approve it before you can log in)
 
 ### Step 2 — Login
 - Go to `/admin/login`
@@ -134,6 +134,25 @@ App runs at `http://localhost:3000`
 - Students below 75% attendance are highlighted in red
 - Download as CSV or send individual report to parent via Telegram
 
+### Step 7 — Collect Fees
+- Dashboard → **Fees**
+- The top of the page shows **Outstanding** (total still due) and **Collected** (total received)
+- **Generate Month** — create monthly invoices in bulk:
+  - Tick **All batches**, or select **any number of batches** from the checkbox list
+  - Pick the **month** (defaults to the current month, but any month can be chosen)
+  - Enter an **amount per student**, or leave it blank to use each batch's own monthly fee
+  - Optionally set a **due date**
+  - Students already invoiced for that month are **skipped automatically** — safe to re-run after enrolling new students; it never creates duplicates
+- **Add Charge** — create a one-off charge for a single student (e.g. Admission Fee, Books)
+- **Record Payment** — log cash / UPI / card / bank / cheque against an invoice; partial payments are supported and the status updates to Partial → Paid automatically
+- **Ledger** — view every payment recorded against an invoice
+- **Waive** — mark a fee as settled with nothing due (use this instead of deleting once payments exist)
+- To correct a payment, record a **negative amount** — the ledger is preserved as a full audit trail
+
+### Step 8 — Fix Attendance (Correction)
+- Dashboard → **Attendance Correction**
+- Fix or delete wrong attendance entries
+
 ---
 
 ## Teacher Flow
@@ -159,6 +178,16 @@ App runs at `http://localhost:3000`
   - Exam Reminder
 - Tap **Send Alert to Parents**
 
+### Record Fee Payments
+- Bottom nav → **Fees**
+- View outstanding dues (filter by batch; toggle **Due only** / **All**)
+- Tap **Record Payment** to log a payment — useful for collecting cash in class
+- Teachers can view dues and record payments; creating/waiving invoices is admin-only
+
+### View Sent Messages
+- Bottom nav → **Messages**
+- See the Telegram messages that have gone to parents, with delivery status
+
 ---
 
 ## Super Admin Flow
@@ -169,6 +198,7 @@ App runs at `http://localhost:3000`
 ### Institute Management
 - View all institutes by status: Pending, Active, Revoked, Suspended, Archived
 - Approve, reject, suspend, or permanently delete institutes
+- The dashboard also shows the daily reminder cron status (last run, messages sent/failed)
 
 ### Institute Oversight
 - Select any approved institute to view its full data:
@@ -176,8 +206,7 @@ App runs at `http://localhost:3000`
   - **Teachers** — all teachers and Telegram status
   - **Students** — all students and parent link status
   - **Reports** — attendance reports with CSV download
-  - **Comms** — all Telegram messages sent, with full message content
-  - **Audit** — complete activity log (attendance marked, students enrolled, batches created, etc.)
+  - **Comms** — all Telegram messages sent, with full message content and delivery status
 
 ---
 
@@ -190,8 +219,12 @@ App runs at `http://localhost:3000`
 | Student marked present (if enabled) | Parent gets present confirmation |
 | Student exits early | Parent gets exit alert with time |
 | Alert sent by teacher | All parents in selected batch |
+| Schedule change | Parents in the batch get the updated schedule |
+| Class today reminder | Parents get a reminder on the morning of a scheduled class (daily cron) |
 | Student enrolled | Parent gets welcome message |
 | Attendance report sent | Parent gets weekly/biweekly/monthly summary |
+
+> Fees are **internal only** — parents are not notified about invoices or payments.
 
 ---
 
@@ -199,17 +232,21 @@ App runs at `http://localhost:3000`
 
 | URL | Who uses it |
 |-----|-------------|
-| `/register` | New institute registration |
+| `/admin/register` | New institute registration |
 | `/admin/login` | Admin login |
 | `/admin/dashboard` | Admin home |
 | `/admin/batches` | Manage batches |
 | `/admin/teachers` | Manage teachers |
 | `/admin/students` | Manage students |
+| `/admin/fees` | Fee collection — invoices, payments, dues |
 | `/admin/reports` | Attendance reports |
+| `/admin/attendance` | Attendance correction (fix/delete entries) |
 | `/teacher/login` | Teacher login |
 | `/teacher/dashboard` | Teacher home |
 | `/teacher/attendance` | Mark attendance |
+| `/teacher/fees` | View dues and record payments |
 | `/teacher/alerts` | Send parent alerts |
+| `/teacher/messages` | View sent Telegram messages |
 | `/super-admin/login` | Super admin login |
 | `/super-admin/dashboard` | Institute management |
 | `/super-admin/overview` | Institute data oversight |

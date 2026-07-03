@@ -54,7 +54,7 @@ export default function FeesPage() {
 
   // Generate month sheet
   const [showGenerate, setShowGenerate] = useState(false)
-  const [genForm, setGenForm] = useState({ batch_id: '', period_month: currentMonth(), amount: '', due_date: '' })
+  const [genForm, setGenForm] = useState({ batch_ids: [] as string[], all: false, period_month: currentMonth(), amount: '', due_date: '' })
   const [genLoading, setGenLoading] = useState(false)
   const [genError, setGenError] = useState('')
   const [genMsg, setGenMsg] = useState('')
@@ -110,18 +110,38 @@ export default function FeesPage() {
     .reduce((sum, i) => sum + (Number(i.amount) - Number(i.amount_paid)), 0)
   const collected = invoices.reduce((sum, i) => sum + Number(i.amount_paid), 0)
 
+  function toggleGenBatch(id: string) {
+    setGenForm(prev => ({
+      ...prev,
+      batch_ids: prev.batch_ids.includes(id) ? prev.batch_ids.filter(b => b !== id) : [...prev.batch_ids, id],
+    }))
+  }
+
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault()
+    if (!genForm.all && genForm.batch_ids.length === 0) return setGenError('Select at least one batch')
     setGenLoading(true); setGenError(''); setGenMsg('')
     const res = await fetch('/api/fees', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ generate: true, ...genForm, amount: genForm.amount || undefined }),
+      body: JSON.stringify({
+        generate: true,
+        all: genForm.all,
+        batch_ids: genForm.batch_ids,
+        period_month: genForm.period_month,
+        due_date: genForm.due_date,
+        amount: genForm.amount || undefined,
+      }),
     })
     const data = await res.json()
     setGenLoading(false)
     if (!res.ok) return setGenError(data.error)
-    setGenMsg(`Created ${data.created} invoice(s)${data.skipped ? `, skipped ${data.skipped} already invoiced` : ''}.`)
+    const noAmount = (data.details || []).filter((d: { error?: string }) => d.error === 'no amount or monthly fee').length
+    setGenMsg(
+      `Created ${data.created} invoice(s)` +
+      (data.skipped ? `, skipped ${data.skipped} already invoiced` : '') +
+      (noAmount ? `. ${noAmount} batch(es) skipped — no amount or monthly fee` : '') + '.'
+    )
     load()
   }
 
@@ -185,7 +205,6 @@ export default function FeesPage() {
     load()
   }
 
-  const selectedGenBatch = batches.find(b => b.id === genForm.batch_id)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -308,22 +327,40 @@ export default function FeesPage() {
         <form onSubmit={handleGenerate} className="space-y-3">
           {genError && <p className="text-red-600 text-sm">{genError}</p>}
           {genMsg && <p className="text-green-600 text-sm">{genMsg}</p>}
-          <select className="w-full border rounded-lg px-3 py-2 text-sm" required
-            value={genForm.batch_id} onChange={e => setGenForm({ ...genForm, batch_id: e.target.value })}>
-            <option value="">Select Batch</option>
-            {batches.map(b => <option key={b.id} value={b.id}>{b.name} - {b.subject}</option>)}
-          </select>
+
+          {/* Batch selection: All batches, or pick any number */}
+          <div className="border rounded-lg divide-y">
+            <label className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={genForm.all}
+                onChange={e => setGenForm({ ...genForm, all: e.target.checked })} />
+              All batches
+            </label>
+            {!genForm.all && (
+              <div className="max-h-44 overflow-y-auto">
+                {batches.map(b => (
+                  <label key={b.id} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 cursor-pointer">
+                    <input type="checkbox" checked={genForm.batch_ids.includes(b.id)}
+                      onChange={() => toggleGenBatch(b.id)} />
+                    <span className="flex-1">{b.name} - {b.subject}</span>
+                    {b.monthly_fee != null && <span className="text-xs text-gray-400">₹{b.monthly_fee}</span>}
+                  </label>
+                ))}
+                {batches.length === 0 && <p className="px-3 py-2 text-xs text-gray-400">No batches yet.</p>}
+              </div>
+            )}
+          </div>
+
           <input type="month" className="w-full border rounded-lg px-3 py-2 text-sm" required
             value={genForm.period_month} onChange={e => setGenForm({ ...genForm, period_month: e.target.value })} />
           <input inputMode="numeric" className="w-full border rounded-lg px-3 py-2 text-sm"
-            placeholder={selectedGenBatch?.monthly_fee != null ? `Amount (batch default ₹${selectedGenBatch.monthly_fee})` : 'Amount per student (₹)'}
+            placeholder="Amount per student (₹) — blank uses each batch's monthly fee"
             value={genForm.amount} onChange={e => setGenForm({ ...genForm, amount: e.target.value })} />
           <div>
             <label className="block text-xs text-gray-500 mb-1">Due date (optional)</label>
             <input type="date" className="w-full border rounded-lg px-3 py-2 text-sm"
               value={genForm.due_date} onChange={e => setGenForm({ ...genForm, due_date: e.target.value })} />
           </div>
-          <p className="text-xs text-gray-400">Creates one invoice for every student in the batch. Students already invoiced for this month are skipped.</p>
+          <p className="text-xs text-gray-400">Creates one invoice per student across the selected batch(es). Students already invoiced for this month are skipped.</p>
           <button type="submit" disabled={genLoading}
             className="w-full bg-blue-600 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-50 mt-2">
             {genLoading ? 'Generating...' : 'Generate'}
