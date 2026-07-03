@@ -136,15 +136,17 @@ App runs at `http://localhost:3000`
 
 ### Step 7 — Collect Fees
 - Dashboard → **Fees**
-- The top of the page shows **Outstanding** (total still due) and **Collected** (total received)
+- **Outstanding** (total still due) and **Collected** (total received) tiles reflect the **Month + Batch + Teacher** filters you've selected (they default to the current month)
+- **Filters** — narrow the list by **Month**, **Teacher**, **Batch**, and **Status** (Pending / Partial / Paid / Waived)
 - **Generate Month** — create monthly invoices in bulk:
-  - Tick **All batches**, or select **any number of batches** from the checkbox list
+  - Tick **All batches**, select **any number of batches**, and/or pick **individual students** (searchable) — you can combine batches and students
   - Pick the **month** (defaults to the current month, but any month can be chosen)
   - Enter an **amount per student**, or leave it blank to use each batch's own monthly fee
   - Optionally set a **due date**
   - Students already invoiced for that month are **skipped automatically** — safe to re-run after enrolling new students; it never creates duplicates
 - **Add Charge** — create a one-off charge for a single student (e.g. Admission Fee, Books)
-- **Record Payment** — log cash / UPI / card / bank / cheque against an invoice; partial payments are supported and the status updates to Partial → Paid automatically
+- **Record Payment** — log cash / UPI / card / bank / cheque against an invoice, with an editable **received date & time** (defaults to now); partial payments update the status Partial → Paid automatically
+- **Edit** — change an invoice's amount or due date; the status recalculates automatically
 - **Ledger** — view every payment recorded against an invoice
 - **Waive** — mark a fee as settled with nothing due (use this instead of deleting once payments exist)
 - To correct a payment, record a **negative amount** — the ledger is preserved as a full audit trail
@@ -168,6 +170,13 @@ App runs at `http://localhost:3000`
 - Parents receive Telegram messages automatically when marked
 - Tap **Send Exit Alert** when a student leaves early
 
+### Extra / Ad-hoc Class
+- For an unscheduled extra class (revision, doubt session, makeup class):
+- Dashboard → **+ Extra Class** → choose the batch and an optional label (e.g. "Revision")
+- Mark attendance exactly like a normal class — **parents are still notified** as usual
+- Extra classes are kept **separate from attendance reports** (they do not affect the attendance %), so a bonus class never distorts the numbers
+- Works on any day, regardless of the batch's regular schedule
+
 ### Send Alerts
 - Dashboard → **Send Alert** (or tap the Send Alerts button on a batch)
 - Choose to send by batch or by individual student
@@ -178,11 +187,11 @@ App runs at `http://localhost:3000`
   - Exam Reminder
 - Tap **Send Alert to Parents**
 
-### Record Fee Payments
+### Fees
 - Bottom nav → **Fees**
-- View outstanding dues (filter by batch; toggle **Due only** / **All**)
-- Tap **Record Payment** to log a payment — useful for collecting cash in class
-- Teachers can view dues and record payments; creating/waiving invoices is admin-only
+- Shows the **same view as admin, but limited to your own batches**: Outstanding / Collected tiles and filters by **Month / Batch / Status**
+- **Record Payment** (with received date & time), view **Ledger**, **Edit** an amount, and **Waive** — all for invoices in the batches assigned to you
+- Only **admins** can **Generate Month** or **Add Charge**
 
 ### View Sent Messages
 - Bottom nav → **Messages**

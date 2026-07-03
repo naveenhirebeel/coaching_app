@@ -65,6 +65,8 @@ create table attendance (
   status text check (status in ('present', 'absent', 'late')) not null,
   marked_at timestamptz, -- teacher-chosen entry time (adjustable); falls back to created_at when null
   exit_time timestamptz,
+  is_adhoc boolean not null default false, -- true for extra/unscheduled classes; excluded from attendance % reports
+  session_label text, -- optional label for an ad-hoc session, e.g. "Revision", "Doubt class"
   created_at timestamptz default now()
   -- no unique constraint: multiple entries per student/day allowed for full audit log
 );
@@ -285,3 +287,8 @@ create table telegram_message_log (
 -- alter table activity_logs drop constraint if exists activity_logs_event_type_check;
 -- alter table activity_logs add constraint activity_logs_event_type_check
 --   check (event_type in ('attendance_marked', 'attendance_exit', 'student_enrolled', 'student_deleted', 'teacher_added', 'teacher_deleted', 'batch_created', 'batch_deleted', 'telegram_sent', 'telegram_failed', 'fee_charged', 'fee_paid', 'fee_waived'));
+
+-- 16. Ad-hoc (extra / unscheduled) classes — flag attendance rows so they can be
+-- kept out of the regular attendance % reports.
+-- alter table attendance add column if not exists is_adhoc boolean not null default false;
+-- alter table attendance add column if not exists session_label text;

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PageHeader from '@/components/PageHeader'
 import TeacherBottomNav from '@/components/TeacherBottomNav'
+import BottomSheet from '@/components/BottomSheet'
 import { sortBatches, type Slot } from '@/lib/sortBatches'
 
 type Student = { id: string; name: string }
@@ -61,6 +62,11 @@ export default function TeacherDashboard() {
   const [expandedBatch, setExpandedBatch] = useState<string | null>(null)
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
 
+  // Extra (ad-hoc) class chooser
+  const [showExtra, setShowExtra] = useState(false)
+  const [extraBatch, setExtraBatch] = useState('')
+  const [extraLabel, setExtraLabel] = useState('')
+
   // Change password state
   const [showChangePw, setShowChangePw] = useState(false)
   const [cpStep, setCpStep] = useState<ChangePasswordStep>('phone')
@@ -84,7 +90,7 @@ export default function TeacherDashboard() {
     const todayDate = new Date().toISOString().split('T')[0]
     Promise.all([
       fetch('/api/batches', { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`/api/attendance?date=${todayDate}`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`/api/attendance?date=${todayDate}&adhoc=0`, { headers: { Authorization: `Bearer ${token}` } }),
     ]).then(async ([bRes, aRes]) => {
       if (bRes.status === 401) return router.push('/teacher/login')
       setBatches(sortBatches(await bRes.json()))
@@ -96,6 +102,14 @@ export default function TeacherDashboard() {
     localStorage.removeItem('token')
     localStorage.removeItem('teacher')
     router.push('/')
+  }
+
+  function startExtraClass() {
+    if (!extraBatch) return
+    const b = batches.find(x => x.id === extraBatch)
+    const q = new URLSearchParams({ batch_id: extraBatch, batch_name: b?.name || 'Batch', adhoc: '1' })
+    if (extraLabel.trim()) q.set('label', extraLabel.trim())
+    router.push(`/teacher/attendance?${q.toString()}`)
   }
 
   async function cpSendOtp(e: React.FormEvent) {
@@ -293,10 +307,16 @@ export default function TeacherDashboard() {
 
         <div className="flex justify-between items-center mb-3">
           <h2 className="font-semibold text-gray-800">Your Batches</h2>
-          <Link href="/teacher/alerts"
-            className="text-sm bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600">
-            Send Alert
-          </Link>
+          <div className="flex gap-2">
+            <button onClick={() => { setExtraBatch(''); setExtraLabel(''); setShowExtra(true) }}
+              className="text-sm bg-amber-500 text-white px-3 py-1.5 rounded-lg hover:bg-amber-600">
+              + Extra Class
+            </button>
+            <Link href="/teacher/alerts"
+              className="text-sm bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600">
+              Send Alert
+            </Link>
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -415,6 +435,26 @@ export default function TeacherDashboard() {
           )}
         </div>
       </main>
+
+      <BottomSheet open={showExtra} onClose={() => setShowExtra(false)} title="Start Extra Class">
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500">
+            Mark attendance for an unscheduled/extra class. Parents are notified as usual, but it is not counted in attendance reports.
+          </p>
+          <select className="w-full border rounded-lg px-3 py-2 text-sm"
+            value={extraBatch} onChange={e => setExtraBatch(e.target.value)}>
+            <option value="">Select Batch</option>
+            {batches.map(b => <option key={b.id} value={b.id}>{b.name} - {b.subject}</option>)}
+          </select>
+          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Label (optional, e.g. Revision)"
+            value={extraLabel} onChange={e => setExtraLabel(e.target.value)} />
+          <button onClick={startExtraClass} disabled={!extraBatch}
+            className="w-full bg-amber-500 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-50">
+            Start Marking
+          </button>
+        </div>
+      </BottomSheet>
+
       <TeacherBottomNav />
     </div>
   )

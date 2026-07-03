@@ -24,6 +24,8 @@ function AttendanceContent() {
   const params = useSearchParams()
   const batchId = params.get('batch_id') || ''
   const batchName = params.get('batch_name') || 'Batch'
+  const adhoc = params.get('adhoc') === '1'          // extra / unscheduled class
+  const sessionLabel = params.get('label') || ''      // optional ad-hoc label
 
   const [students, setStudents] = useState<Student[]>([])
   const [marked, setMarked] = useState<MarkedMap>({})
@@ -44,7 +46,8 @@ function AttendanceContent() {
 
     Promise.all([
       fetch(`/api/students?batch_id=${batchId}`, { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`/api/attendance?batch_id=${batchId}&date=${today}`, { headers: { Authorization: `Bearer ${token}` } }),
+      // Keep the extra-class session separate from the scheduled one on the same day.
+      fetch(`/api/attendance?batch_id=${batchId}&date=${today}&adhoc=${adhoc ? '1' : '0'}`, { headers: { Authorization: `Bearer ${token}` } }),
     ]).then(async ([sRes, aRes]) => {
       if (sRes.status === 401) return router.push('/teacher/login')
       const studentData: Student[] = await sRes.json()
@@ -73,7 +76,7 @@ function AttendanceContent() {
         setExits(exitMap)
       }
     })
-  }, [batchId, router])
+  }, [batchId, adhoc, router])
 
   async function mark(studentId: string, status: MarkedStatus) {
     setSending(prev => ({ ...prev, [studentId]: status }))
@@ -91,6 +94,7 @@ function AttendanceContent() {
         status,
         notify_present: notifyPresent,
         marked_at,
+        ...(adhoc ? { is_adhoc: true, session_label: sessionLabel || undefined } : {}),
       }),
     })
     const data = await res.json()
@@ -154,11 +158,18 @@ function AttendanceContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <PageHeader
-        title={batchName}
-        subtitle={`${markedCount} of ${total} marked`}
+        title={adhoc ? `${batchName} · Extra Class` : batchName}
+        subtitle={adhoc
+          ? `${sessionLabel ? sessionLabel + ' · ' : ''}${markedCount} of ${total} marked`
+          : `${markedCount} of ${total} marked`}
         backHref="/teacher/dashboard"
         homeHref="/teacher/dashboard"
       />
+      {adhoc && (
+        <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 text-xs text-amber-700 text-center">
+          Extra class — not counted in attendance reports. Parents are still notified.
+        </div>
+      )}
 
       <main className="p-4 max-w-xl mx-auto pb-28 space-y-3">
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer bg-white rounded-xl shadow-sm px-4 py-3">
