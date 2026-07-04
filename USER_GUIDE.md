@@ -171,11 +171,12 @@ App runs at `http://localhost:3000`
 - Tap **Send Exit Alert** when a student leaves early
 
 ### Extra / Ad-hoc Class
-- For an unscheduled extra class (revision, doubt session, makeup class):
-- Dashboard → **+ Extra Class** → choose the batch and an optional label (e.g. "Revision")
-- Mark attendance exactly like a normal class — **parents are still notified** as usual
-- Extra classes are kept **separate from attendance reports** (they do not affect the attendance %), so a bonus class never distorts the numbers
-- Works on any day, regardless of the batch's regular schedule
+- For an unscheduled extra class (revision, doubt session, makeup class), no special mode is needed:
+1. Optionally send parents a heads-up with **Send Alert**.
+2. Open the batch and mark the attending students **Present** exactly like a normal class (parents are notified as usual).
+- As soon as a student is marked Present, that batch **jumps to the top of your list and turns green ("Active")** — even if the class isn't on today's schedule. Multiple batches can be active at once.
+- It stays green and first until all present students are marked **Exit**, then it returns to the normal schedule-based order.
+- Extra-class attendance is counted like any normal class.
 
 ### Send Alerts
 - Dashboard → **Send Alert** (or tap the Send Alerts button on a batch)

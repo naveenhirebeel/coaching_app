@@ -10,7 +10,6 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const batchId = searchParams.get('batch_id')
   const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
-  const adhoc = searchParams.get('adhoc') // '1' = only ad-hoc, '0' = only regular, absent = all
 
   let query = supabaseAdmin
     .from('attendance')
@@ -20,8 +19,6 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: true })
 
   if (batchId) query = query.eq('batch_id', batchId)
-  if (adhoc === '1') query = query.eq('is_adhoc', true)
-  else if (adhoc === '0') query = query.eq('is_adhoc', false)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -33,7 +30,7 @@ export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { student_id, batch_id, date, status, notify_present, marked_at, is_adhoc, session_label } = await req.json()
+  const { student_id, batch_id, date, status, notify_present, marked_at } = await req.json()
 
   if (!student_id || !batch_id || !date || !status) {
     return NextResponse.json({ error: 'student_id, batch_id, date and status are required' }, { status: 400 })
@@ -41,12 +38,7 @@ export async function POST(req: NextRequest) {
 
   const { data: inserted, error: insertError } = await supabaseAdmin
     .from('attendance')
-    .insert({
-      student_id, batch_id, date, status, institute_id: user.institute_id,
-      ...(marked_at ? { marked_at } : {}),
-      ...(is_adhoc ? { is_adhoc: true } : {}),
-      ...(session_label ? { session_label } : {}),
-    })
+    .insert({ student_id, batch_id, date, status, institute_id: user.institute_id, ...(marked_at ? { marked_at } : {}) })
     .select('id')
     .single()
 

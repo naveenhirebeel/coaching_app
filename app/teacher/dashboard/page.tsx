@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PageHeader from '@/components/PageHeader'
 import TeacherBottomNav from '@/components/TeacherBottomNav'
-import BottomSheet from '@/components/BottomSheet'
 import { sortBatches, type Slot } from '@/lib/sortBatches'
 
 type Student = { id: string; name: string }
@@ -48,6 +47,10 @@ function batchPriority(
   const stillInClass = present.filter(r => !r.exit_time).length
   const isCompleted = rows.length > 0 && present.length > 0 && stillInClass === 0
 
+  // A batch with students marked present who haven't exited is "in session" and
+  // floats to the top — regardless of the schedule. This covers extra/off-schedule
+  // classes: mark a student present and the batch surfaces first as active.
+  if (stillInClass > 0) return 0
   if (isActive) return 0
   if (isToday && !isCompleted) return 1
   if (!isToday) return 2
@@ -61,11 +64,6 @@ export default function TeacherDashboard() {
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRow[]>([])
   const [expandedBatch, setExpandedBatch] = useState<string | null>(null)
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
-
-  // Extra (ad-hoc) class chooser
-  const [showExtra, setShowExtra] = useState(false)
-  const [extraBatch, setExtraBatch] = useState('')
-  const [extraLabel, setExtraLabel] = useState('')
 
   // Change password state
   const [showChangePw, setShowChangePw] = useState(false)
@@ -90,7 +88,7 @@ export default function TeacherDashboard() {
     const todayDate = new Date().toISOString().split('T')[0]
     Promise.all([
       fetch('/api/batches', { headers: { Authorization: `Bearer ${token}` } }),
-      fetch(`/api/attendance?date=${todayDate}&adhoc=0`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`/api/attendance?date=${todayDate}`, { headers: { Authorization: `Bearer ${token}` } }),
     ]).then(async ([bRes, aRes]) => {
       if (bRes.status === 401) return router.push('/teacher/login')
       setBatches(sortBatches(await bRes.json()))
@@ -102,14 +100,6 @@ export default function TeacherDashboard() {
     localStorage.removeItem('token')
     localStorage.removeItem('teacher')
     router.push('/')
-  }
-
-  function startExtraClass() {
-    if (!extraBatch) return
-    const b = batches.find(x => x.id === extraBatch)
-    const q = new URLSearchParams({ batch_id: extraBatch, batch_name: b?.name || 'Batch', adhoc: '1' })
-    if (extraLabel.trim()) q.set('label', extraLabel.trim())
-    router.push(`/teacher/attendance?${q.toString()}`)
   }
 
   async function cpSendOtp(e: React.FormEvent) {
@@ -307,16 +297,10 @@ export default function TeacherDashboard() {
 
         <div className="flex justify-between items-center mb-3">
           <h2 className="font-semibold text-gray-800">Your Batches</h2>
-          <div className="flex gap-2">
-            <button onClick={() => { setExtraBatch(''); setExtraLabel(''); setShowExtra(true) }}
-              className="text-sm bg-amber-500 text-white px-3 py-1.5 rounded-lg hover:bg-amber-600">
-              + Extra Class
-            </button>
-            <Link href="/teacher/alerts"
-              className="text-sm bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600">
-              Send Alert
-            </Link>
-          </div>
+          <Link href="/teacher/alerts"
+            className="text-sm bg-orange-500 text-white px-3 py-1.5 rounded-lg hover:bg-orange-600">
+            Send Alert
+          </Link>
         </div>
 
         <div className="space-y-3">
@@ -326,13 +310,16 @@ export default function TeacherDashboard() {
             const todayBatch = isTodayBatch(b.schedule_slots ?? [])
             const activeBatch = isActiveBatch(b.schedule_slots ?? [])
             const completed = isCompletedBatch(b.id)
+            // Students marked present who haven't exited → batch is live (also covers extra/off-schedule classes)
+            const inSession = todayAttendance.some(r => r.batch_id === b.id && (r.status === 'present' || r.status === 'late') && !r.exit_time)
+            const live = inSession || activeBatch
             const { present, absent } = getAttendanceCounts(b.id)
 
             return (
               <div key={b.id} className={`rounded-xl shadow-sm p-4 border-l-4 ${
                 completed
                   ? 'bg-gray-50 border-l-gray-300'
-                  : activeBatch
+                  : live
                   ? 'bg-white border-l-green-500'
                   : todayBatch
                   ? 'bg-white border-l-amber-400'
@@ -347,7 +334,7 @@ export default function TeacherDashboard() {
                           ✓ Completed
                         </span>
                       )}
-                      {activeBatch && !completed && (
+                      {live && !completed && (
                         <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
                           Active
@@ -386,7 +373,7 @@ export default function TeacherDashboard() {
                 </div>
 
                 {/* Present / Absent counts */}
-                {todayBatch && (
+                {(todayBatch || live) && (
                   <div className="flex gap-2 mt-2">
                     {attendanceDone ? (
                       <>
@@ -435,26 +422,6 @@ export default function TeacherDashboard() {
           )}
         </div>
       </main>
-
-      <BottomSheet open={showExtra} onClose={() => setShowExtra(false)} title="Start Extra Class">
-        <div className="space-y-3">
-          <p className="text-xs text-gray-500">
-            Mark attendance for an unscheduled/extra class. Parents are notified as usual, but it is not counted in attendance reports.
-          </p>
-          <select className="w-full border rounded-lg px-3 py-2 text-sm"
-            value={extraBatch} onChange={e => setExtraBatch(e.target.value)}>
-            <option value="">Select Batch</option>
-            {batches.map(b => <option key={b.id} value={b.id}>{b.name} - {b.subject}</option>)}
-          </select>
-          <input className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Label (optional, e.g. Revision)"
-            value={extraLabel} onChange={e => setExtraLabel(e.target.value)} />
-          <button onClick={startExtraClass} disabled={!extraBatch}
-            className="w-full bg-amber-500 text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-50">
-            Start Marking
-          </button>
-        </div>
-      </BottomSheet>
-
       <TeacherBottomNav />
     </div>
   )

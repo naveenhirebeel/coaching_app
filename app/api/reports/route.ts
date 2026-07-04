@@ -29,7 +29,6 @@ export async function GET(req: NextRequest) {
     .from('attendance')
     .select('id, student_id, status, date, created_at, exit_time, students(name, parent_telegram_chat_id), batches(name)')
     .eq('institute_id', instituteId)
-    .eq('is_adhoc', false) // extra/unscheduled classes are excluded from attendance % reports
     .order('date', { ascending: false })
     .order('created_at', { ascending: true })
 

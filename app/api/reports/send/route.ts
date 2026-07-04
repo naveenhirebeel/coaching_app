@@ -46,7 +46,6 @@ export async function POST(req: NextRequest) {
     .select('date, status, created_at, marked_at, exit_time')
     .eq('student_id', student_id)
     .eq('institute_id', user.institute_id)
-    .eq('is_adhoc', false) // exclude extra/unscheduled classes from the parent attendance summary
     .gte('date', from)
     .lte('date', to)
     .order('date', { ascending: true })
