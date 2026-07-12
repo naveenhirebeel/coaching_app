@@ -7,11 +7,17 @@ export async function POST(req: NextRequest) {
   const user = getAuthUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { batch_id, student_id, message } = await req.json()
+  const { batch_id, batch_ids, student_id, message } = await req.json()
 
   if (!message) {
     return NextResponse.json({ error: 'Message is required' }, { status: 400 })
   }
+
+  // Accept either a single batch_id (legacy) or a batch_ids array. An empty list
+  // means "all batches in the institute".
+  const batchIds: string[] = Array.isArray(batch_ids)
+    ? batch_ids.filter(Boolean)
+    : (batch_id ? [batch_id] : [])
 
   // Get institute name
   const { data: institute } = await supabaseAdmin
@@ -43,13 +49,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, message: `Alert sent to ${student.name}'s parent(s).` })
   }
 
-  // Batch-wise alert (batch_id = null means all batches)
+  // Batch-wise alert (empty batchIds means all batches)
   let studentsQuery = supabaseAdmin
     .from('students')
-    .select('id, name, parent_telegram_chat_id, parent2_telegram_chat_id, batches(name)')
+    .select('id, name, batch_id, parent_telegram_chat_id, parent2_telegram_chat_id, batches(name)')
     .eq('institute_id', user.institute_id)
 
-  if (batch_id) studentsQuery = studentsQuery.eq('batch_id', batch_id)
+  if (batchIds.length > 0) studentsQuery = studentsQuery.in('batch_id', batchIds)
 
   const { data: students, error } = await studentsQuery
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -60,9 +66,10 @@ export async function POST(req: NextRequest) {
     if (chatIds.length === 0) continue
     const batchName = (student.batches as { name?: string })?.name || 'All Batches'
     const msg = holidayMessage(batchName, message, instituteName)
-    await Promise.all(chatIds.map(chatId => sendTrackedMessage({ instituteId: user.institute_id, studentId: student.id, batchId: batch_id || null, chatId, messageType: 'alert', message: msg, withAck: true })))
+    await Promise.all(chatIds.map(chatId => sendTrackedMessage({ instituteId: user.institute_id, studentId: student.id, batchId: student.batch_id || null, chatId, messageType: 'alert', message: msg, withAck: true })))
     sentCount++
   }
 
-  return NextResponse.json({ success: true, message: `Alert sent to ${sentCount} students' parents.` })
+  const scope = batchIds.length === 0 ? 'all batches' : `${batchIds.length} batch${batchIds.length > 1 ? 'es' : ''}`
+  return NextResponse.json({ success: true, message: `Alert sent to ${sentCount} students' parents across ${scope}.` })
 }

@@ -23,7 +23,8 @@ function AlertsContent() {
   const [mode, setMode] = useState<Mode>('batch')
   const [batches, setBatches] = useState<Batch[]>([])
   const [students, setStudents] = useState<Student[]>([])
-  const [batchId, setBatchId] = useState(params.get('batch_id') || '')
+  const [batchId, setBatchId] = useState(params.get('batch_id') || '') // student-mode filter
+  const [batchIds, setBatchIds] = useState<string[]>(params.get('batch_id') ? [params.get('batch_id') as string] : []) // batch-mode targets (empty = all)
   const [studentId, setStudentId] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -53,6 +54,10 @@ function AlertsContent() {
     setStudentId('')
   }
 
+  function toggleBatch(id: string) {
+    setBatchIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
   async function handleSend() {
     if (!message.trim()) return setError('Please enter a message')
     if (mode === 'student' && !studentId) return setError('Please select a student')
@@ -60,7 +65,7 @@ function AlertsContent() {
 
     const body = mode === 'student'
       ? { student_id: studentId, message }
-      : { batch_id: batchId || null, message }
+      : { batch_ids: batchIds, message }
 
     const res = await fetch('/api/alerts', {
       method: 'POST',
@@ -100,17 +105,38 @@ function AlertsContent() {
 
         {/* Target selector */}
         <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
-          <label className="block text-sm font-medium text-gray-700">
-            {mode === 'batch' ? 'Send To' : 'Select Batch'}
-          </label>
-          <select className="w-full border rounded-lg px-3 py-2 text-sm"
-            value={batchId} onChange={e => { setBatchId(e.target.value); setStudentId('') }}>
-            <option value="">{mode === 'batch' ? 'All Batches (everyone)' : 'All Batches'}</option>
-            {batches.map(b => <option key={b.id} value={b.id}>{b.name} – {b.subject}</option>)}
-          </select>
-
-          {mode === 'student' && (
+          {mode === 'batch' ? (
             <>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-gray-700">Send To</label>
+                {batchIds.length > 0 && (
+                  <button type="button" onClick={() => setBatchIds([])}
+                    className="text-xs text-orange-600 hover:underline">Clear</button>
+                )}
+              </div>
+              <p className="text-xs text-gray-400">
+                {batchIds.length === 0 ? 'All batches (everyone)' : `${batchIds.length} batch${batchIds.length > 1 ? 'es' : ''} selected`}
+              </p>
+              <div className="border rounded-lg divide-y max-h-60 overflow-y-auto">
+                {batches.map(b => (
+                  <label key={b.id} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" checked={batchIds.includes(b.id)} onChange={() => toggleBatch(b.id)}
+                      className="w-4 h-4 accent-orange-500" />
+                    <span className="text-sm text-gray-700">{b.name} <span className="text-gray-400">– {b.subject}</span></span>
+                  </label>
+                ))}
+                {batches.length === 0 && <p className="text-xs text-gray-400 px-3 py-2.5">No batches yet.</p>}
+              </div>
+              <p className="text-xs text-gray-400">Leave all unchecked to send to every batch.</p>
+            </>
+          ) : (
+            <>
+              <label className="block text-sm font-medium text-gray-700">Select Batch</label>
+              <select className="w-full border rounded-lg px-3 py-2 text-sm"
+                value={batchId} onChange={e => { setBatchId(e.target.value); setStudentId('') }}>
+                <option value="">All Batches</option>
+                {batches.map(b => <option key={b.id} value={b.id}>{b.name} – {b.subject}</option>)}
+              </select>
               <label className="block text-sm font-medium text-gray-700">Select Student</label>
               <select className="w-full border rounded-lg px-3 py-2 text-sm"
                 value={studentId} onChange={e => setStudentId(e.target.value)}>
