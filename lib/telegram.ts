@@ -166,6 +166,14 @@ Hi! Just a reminder that <b>${studentName}</b> has class today.
 🕐 Time: ${classTime}`
 }
 
+// A per-day custom note (exam today, bring notes, class cancelled, ...) set by
+// an admin for a batch. Sent either on its own or appended to the daily reminder.
+export function customNoteMessage(customMessage: string, instituteName: string) {
+  return `📢 <b>Note — ${instituteName}</b>
+
+${customMessage}`
+}
+
 export function scheduleChangeMessage(studentName: string, batchName: string, newSchedule: string, instituteName: string) {
   return `📅 <b>Schedule Update — ${instituteName}</b>
 

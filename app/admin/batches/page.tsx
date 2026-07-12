@@ -17,6 +17,26 @@ function fmt12(t: string) {
   return `${h % 12 || 12}:${m.toString().padStart(2, '0')} ${ampm}`
 }
 
+// Today's date (YYYY-MM-DD) in IST, matching the cron's timezone.
+function istToday() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
+  return (
+    <button type="button" onClick={() => onChange(!checked)}
+      className="w-full flex items-center justify-between gap-3 text-left">
+      <span>
+        <span className="text-sm font-medium text-gray-800">{label}</span>
+        {hint && <span className="block text-xs text-gray-400">{hint}</span>}
+      </span>
+      <span className={`shrink-0 w-11 h-6 rounded-full p-0.5 transition ${checked ? 'bg-blue-600' : 'bg-gray-300'}`}>
+        <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : ''}`} />
+      </span>
+    </button>
+  )
+}
+
 function SlotBuilder({ slots, onChange }: { slots: Slot[]; onChange: (s: Slot[]) => void }) {
   function add() { onChange([...slots, { day: 'Mon', start: '09:00', end: '10:00' }]) }
   function remove(i: number) { onChange(slots.filter((_, idx) => idx !== i)) }
@@ -97,6 +117,11 @@ export default function BatchesPage() {
   const [notifyBatch, setNotifyBatch] = useState<{ id: string; name: string } | null>(null)
   const [notifying, setNotifying] = useState(false)
   const [notifyResult, setNotifyResult] = useState('')
+  const [dailyBatch, setDailyBatch] = useState<{ id: string; name: string } | null>(null)
+  const [daily, setDaily] = useState({ override_date: istToday(), send_default: true, custom_enabled: false, custom_message: '' })
+  const [dailyLoading, setDailyLoading] = useState(false)
+  const [dailySaving, setDailySaving] = useState(false)
+  const [dailyMsg, setDailyMsg] = useState('')
 
   async function handleDelete(id: string) {
     if (!confirm('Delete this batch? This cannot be undone.')) return
@@ -178,6 +203,58 @@ export default function BatchesPage() {
     }
   }
 
+  async function openDaily(b: Batch) {
+    setDailyBatch({ id: b.id, name: b.name })
+    setDailyMsg('')
+    const date = istToday()
+    setDaily({ override_date: date, send_default: true, custom_enabled: false, custom_message: '' })
+    loadDaily(b.id, date)
+  }
+
+  async function loadDaily(batchId: string, date: string) {
+    setDailyLoading(true)
+    const res = await fetch(`/api/batches/daily-message?batch_id=${batchId}&date=${date}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+    const data = await res.json().catch(() => ({}))
+    setDailyLoading(false)
+    const o = data.override
+    setDaily({
+      override_date: date,
+      send_default: o ? o.send_default : true,
+      custom_enabled: o ? o.custom_enabled : false,
+      custom_message: o?.custom_message || '',
+    })
+  }
+
+  async function saveDaily() {
+    if (!dailyBatch) return
+    if (daily.custom_enabled && !daily.custom_message.trim()) { setDailyMsg('Enter a custom message or turn it off.'); return }
+    if (!daily.send_default && !daily.custom_enabled) { setDailyMsg('Nothing will be sent. Enable at least one, or use this to cancel the class silently.') }
+    setDailySaving(true)
+    const res = await fetch('/api/batches/daily-message', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ batch_id: dailyBatch.id, ...daily }),
+    })
+    const data = await res.json().catch(() => ({}))
+    setDailySaving(false)
+    setDailyMsg(res.ok ? 'Saved for ' + daily.override_date : (data.error || 'Failed to save'))
+  }
+
+  async function resetDaily() {
+    if (!dailyBatch) return
+    setDailySaving(true)
+    const res = await fetch('/api/batches/daily-message', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ batch_id: dailyBatch.id, override_date: daily.override_date }),
+    })
+    setDailySaving(false)
+    setDaily({ ...daily, send_default: true, custom_enabled: false, custom_message: '' })
+    setDailyMsg(res.ok ? 'Reset to default reminder.' : 'Failed to reset')
+  }
+
   async function handleNotify() {
     if (!notifyBatch) return
     setNotifying(true)
@@ -223,6 +300,12 @@ export default function BatchesPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 ml-2 shrink-0">
+                  <button onClick={() => openDaily(b)} title="Today's message"
+                    className="p-1.5 text-gray-400 hover:text-blue-600 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </button>
                   <button onClick={() => startEdit(b)} title="Edit"
                     className="p-1.5 text-gray-400 hover:text-blue-600 transition">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -291,6 +374,66 @@ export default function BatchesPage() {
             {editLoading ? 'Saving...' : 'Save Changes'}
           </button>
         </form>
+      </BottomSheet>
+
+      {/* Today's message override sheet */}
+      <BottomSheet open={dailyBatch !== null} onClose={() => setDailyBatch(null)} title="Daily Message">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Customise what parents of <span className="font-medium text-gray-800">{dailyBatch?.name}</span> receive on a given day.
+            Set it before the daily reminder goes out (09:00 IST).
+          </p>
+
+          <div className="space-y-1">
+            <p className="text-xs text-gray-400 pl-0.5">Date</p>
+            <input type="date" value={daily.override_date}
+              min={istToday()}
+              onChange={e => { const d = e.target.value; setDaily({ ...daily, override_date: d }); setDailyMsg(''); if (dailyBatch) loadDaily(dailyBatch.id, d) }}
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-white" />
+          </div>
+
+          {dailyLoading ? (
+            <p className="text-sm text-gray-400 py-4 text-center">Loading...</p>
+          ) : (
+            <>
+              <div className="bg-gray-50 rounded-lg px-3 py-3 space-y-3">
+                <Toggle checked={daily.send_default} onChange={v => setDaily({ ...daily, send_default: v })}
+                  label="Send default reminder" hint="The usual “Class Today” message" />
+                <div className="border-t" />
+                <Toggle checked={daily.custom_enabled} onChange={v => setDaily({ ...daily, custom_enabled: v })}
+                  label="Add custom message" hint="Exam today, bring notes, class cancelled…" />
+              </div>
+
+              {daily.custom_enabled && (
+                <textarea value={daily.custom_message}
+                  onChange={e => setDaily({ ...daily, custom_message: e.target.value })}
+                  placeholder="e.g. Class is cancelled today due to a holiday."
+                  rows={3}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" />
+              )}
+
+              <p className="text-xs text-gray-400">
+                {daily.send_default && daily.custom_enabled && 'Parents get the reminder plus your note.'}
+                {daily.send_default && !daily.custom_enabled && 'Parents get the usual reminder only.'}
+                {!daily.send_default && daily.custom_enabled && 'Parents get only your custom message.'}
+                {!daily.send_default && !daily.custom_enabled && 'No message will be sent (class silently cancelled).'}
+              </p>
+
+              {dailyMsg && <p className="text-sm text-blue-600">{dailyMsg}</p>}
+
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={resetDaily} disabled={dailySaving}
+                  className="flex-1 py-2.5 rounded-xl border text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+                  Reset to default
+                </button>
+                <button type="button" onClick={saveDaily} disabled={dailySaving}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+                  {dailySaving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </BottomSheet>
 
       {/* Schedule change notification modal */}

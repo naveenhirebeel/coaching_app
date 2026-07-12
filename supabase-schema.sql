@@ -150,6 +150,33 @@ create table telegram_message_log (
   created_at timestamptz default now()
 );
 
+-- Per-day override for the daily "Class Today" reminder cron.
+-- One row per (batch, date). Absence of a row = default behaviour (reminder sent).
+--   send_default   : whether the auto "Class Today" reminder goes out that day
+--   custom_enabled : whether an extra custom note is sent that day
+--   custom_message : the custom note text (exam today / bring notes / cancelled ...)
+-- Toggle combos:
+--   default on,  custom off -> normal reminder (everyday default)
+--   default on,  custom on  -> reminder + custom note (one combined message)
+--   default off, custom on  -> only the custom note (e.g. class cancelled)
+--   default off, custom off -> nothing sent that day
+create table daily_batch_messages (
+  id uuid primary key default gen_random_uuid(),
+  institute_id uuid not null references institutes(id) on delete cascade,
+  batch_id uuid not null references batches(id) on delete cascade,
+  override_date date not null, -- IST date this override applies to
+  send_default boolean not null default true,
+  custom_enabled boolean not null default false,
+  custom_message text,
+  created_by text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+create unique index daily_batch_messages_batch_date_uniq
+  on daily_batch_messages (batch_id, override_date);
+create index daily_batch_messages_date_idx
+  on daily_batch_messages (override_date);
+
 
 
 -- ─────────────────────────────────────────────
@@ -285,4 +312,22 @@ create table telegram_message_log (
 -- alter table activity_logs drop constraint if exists activity_logs_event_type_check;
 -- alter table activity_logs add constraint activity_logs_event_type_check
 --   check (event_type in ('attendance_marked', 'attendance_exit', 'student_enrolled', 'student_deleted', 'teacher_added', 'teacher_deleted', 'batch_created', 'batch_deleted', 'telegram_sent', 'telegram_failed', 'fee_charged', 'fee_paid', 'fee_waived'));
+
+-- 16. Per-day customisation of the daily "Class Today" reminder cron
+-- create table if not exists daily_batch_messages (
+--   id uuid primary key default gen_random_uuid(),
+--   institute_id uuid not null references institutes(id) on delete cascade,
+--   batch_id uuid not null references batches(id) on delete cascade,
+--   override_date date not null,
+--   send_default boolean not null default true,
+--   custom_enabled boolean not null default false,
+--   custom_message text,
+--   created_by text,
+--   created_at timestamptz default now(),
+--   updated_at timestamptz default now()
+-- );
+-- create unique index if not exists daily_batch_messages_batch_date_uniq
+--   on daily_batch_messages (batch_id, override_date);
+-- create index if not exists daily_batch_messages_date_idx
+--   on daily_batch_messages (override_date);
 
