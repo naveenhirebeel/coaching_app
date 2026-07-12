@@ -151,7 +151,11 @@ create table telegram_message_log (
 );
 
 -- Per-day override for the daily "Class Today" reminder cron.
--- One row per (batch, date). Absence of a row = default behaviour (reminder sent).
+-- Two scopes:
+--   batch_id = <id>  -> applies to that one batch on that date (most specific)
+--   batch_id = NULL  -> institute-wide: applies to every batch with class that date
+-- Precedence in the cron: a per-batch row wins over the institute-wide row, which
+-- wins over the built-in default (reminder sent). No merging between scopes.
 --   send_default   : whether the auto "Class Today" reminder goes out that day
 --   custom_enabled : whether an extra custom note is sent that day
 --   custom_message : the custom note text (exam today / bring notes / cancelled ...)
@@ -163,7 +167,7 @@ create table telegram_message_log (
 create table daily_batch_messages (
   id uuid primary key default gen_random_uuid(),
   institute_id uuid not null references institutes(id) on delete cascade,
-  batch_id uuid not null references batches(id) on delete cascade,
+  batch_id uuid references batches(id) on delete cascade, -- NULL = institute-wide day setting
   override_date date not null, -- IST date this override applies to
   send_default boolean not null default true,
   custom_enabled boolean not null default false,
@@ -172,8 +176,12 @@ create table daily_batch_messages (
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+-- One row per batch/day (batch-scoped) ...
 create unique index daily_batch_messages_batch_date_uniq
-  on daily_batch_messages (batch_id, override_date);
+  on daily_batch_messages (batch_id, override_date) where batch_id is not null;
+-- ... and one institute-wide row per institute/day.
+create unique index daily_batch_messages_institute_date_uniq
+  on daily_batch_messages (institute_id, override_date) where batch_id is null;
 create index daily_batch_messages_date_idx
   on daily_batch_messages (override_date);
 
@@ -314,10 +322,11 @@ create index daily_batch_messages_date_idx
 --   check (event_type in ('attendance_marked', 'attendance_exit', 'student_enrolled', 'student_deleted', 'teacher_added', 'teacher_deleted', 'batch_created', 'batch_deleted', 'telegram_sent', 'telegram_failed', 'fee_charged', 'fee_paid', 'fee_waived'));
 
 -- 16. Per-day customisation of the daily "Class Today" reminder cron
+--     (batch_id = NULL rows are institute-wide day settings; batch rows override them)
 -- create table if not exists daily_batch_messages (
 --   id uuid primary key default gen_random_uuid(),
 --   institute_id uuid not null references institutes(id) on delete cascade,
---   batch_id uuid not null references batches(id) on delete cascade,
+--   batch_id uuid references batches(id) on delete cascade,
 --   override_date date not null,
 --   send_default boolean not null default true,
 --   custom_enabled boolean not null default false,
@@ -327,7 +336,17 @@ create index daily_batch_messages_date_idx
 --   updated_at timestamptz default now()
 -- );
 -- create unique index if not exists daily_batch_messages_batch_date_uniq
---   on daily_batch_messages (batch_id, override_date);
+--   on daily_batch_messages (batch_id, override_date) where batch_id is not null;
+-- create unique index if not exists daily_batch_messages_institute_date_uniq
+--   on daily_batch_messages (institute_id, override_date) where batch_id is null;
 -- create index if not exists daily_batch_messages_date_idx
 --   on daily_batch_messages (override_date);
+--
+-- If you already ran an earlier version of this block, migrate in place instead:
+-- alter table daily_batch_messages alter column batch_id drop not null;
+-- drop index if exists daily_batch_messages_batch_date_uniq;
+-- create unique index if not exists daily_batch_messages_batch_date_uniq
+--   on daily_batch_messages (batch_id, override_date) where batch_id is not null;
+-- create unique index if not exists daily_batch_messages_institute_date_uniq
+--   on daily_batch_messages (institute_id, override_date) where batch_id is null;
 

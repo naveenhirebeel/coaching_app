@@ -7,6 +7,8 @@ import BottomSheet from '@/components/BottomSheet'
 
 type Slot = { day: string; start: string; end: string }
 type Batch = { id: string; name: string; subject: string; schedule_slots: Slot[]; teacher_id?: string; teachers?: { name: string }; students?: { count: number }[] }
+// The daily-message sheet operates either on one batch or institute-wide (all batches).
+type DailyTarget = { scope: 'batch'; id: string; name: string } | { scope: 'institute' }
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -117,8 +119,9 @@ export default function BatchesPage() {
   const [notifyBatch, setNotifyBatch] = useState<{ id: string; name: string } | null>(null)
   const [notifying, setNotifying] = useState(false)
   const [notifyResult, setNotifyResult] = useState('')
-  const [dailyBatch, setDailyBatch] = useState<{ id: string; name: string } | null>(null)
+  const [dailyTarget, setDailyTarget] = useState<DailyTarget | null>(null)
   const [daily, setDaily] = useState({ override_date: istToday(), send_default: true, custom_enabled: false, custom_message: '' })
+  const [dayWideActive, setDayWideActive] = useState(false) // institute-wide row exists for the selected date
   const [dailyLoading, setDailyLoading] = useState(false)
   const [dailySaving, setDailySaving] = useState(false)
   const [dailyMsg, setDailyMsg] = useState('')
@@ -203,21 +206,25 @@ export default function BatchesPage() {
     }
   }
 
-  async function openDaily(b: Batch) {
-    setDailyBatch({ id: b.id, name: b.name })
+  // batch_id query param only for the batch scope; institute scope omits it.
+  function targetBatchId(t: DailyTarget) { return t.scope === 'batch' ? t.id : null }
+
+  function openDaily(t: DailyTarget) {
+    setDailyTarget(t)
     setDailyMsg('')
     const date = istToday()
     setDaily({ override_date: date, send_default: true, custom_enabled: false, custom_message: '' })
-    loadDaily(b.id, date)
+    loadDaily(t, date)
   }
 
-  async function loadDaily(batchId: string, date: string) {
+  async function loadDaily(t: DailyTarget, date: string) {
     setDailyLoading(true)
-    const res = await fetch(`/api/batches/daily-message?batch_id=${batchId}&date=${date}`, {
+    const bid = targetBatchId(t)
+    const qs = new URLSearchParams({ date, ...(bid ? { batch_id: bid } : {}) })
+    const res = await fetch(`/api/batches/daily-message?${qs}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
     const data = await res.json().catch(() => ({}))
-    setDailyLoading(false)
     const o = data.override
     setDaily({
       override_date: date,
@@ -225,17 +232,30 @@ export default function BatchesPage() {
       custom_enabled: o ? o.custom_enabled : false,
       custom_message: o?.custom_message || '',
     })
+    // For a batch scope, also check whether an institute-wide setting exists that day,
+    // so we can warn that this batch overrides it.
+    if (t.scope === 'batch') {
+      const res2 = await fetch(`/api/batches/daily-message?${new URLSearchParams({ date })}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      const d2 = await res2.json().catch(() => ({}))
+      setDayWideActive(!!d2.override)
+    } else {
+      setDayWideActive(false)
+    }
+    setDailyLoading(false)
   }
 
   async function saveDaily() {
-    if (!dailyBatch) return
+    if (!dailyTarget) return
     if (daily.custom_enabled && !daily.custom_message.trim()) { setDailyMsg('Enter a custom message or turn it off.'); return }
     if (!daily.send_default && !daily.custom_enabled) { setDailyMsg('Nothing will be sent. Enable at least one, or use this to cancel the class silently.') }
     setDailySaving(true)
+    const bid = targetBatchId(dailyTarget)
     const res = await fetch('/api/batches/daily-message', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ batch_id: dailyBatch.id, ...daily }),
+      body: JSON.stringify({ ...(bid ? { batch_id: bid } : {}), ...daily }),
     })
     const data = await res.json().catch(() => ({}))
     setDailySaving(false)
@@ -243,16 +263,17 @@ export default function BatchesPage() {
   }
 
   async function resetDaily() {
-    if (!dailyBatch) return
+    if (!dailyTarget) return
     setDailySaving(true)
+    const bid = targetBatchId(dailyTarget)
     const res = await fetch('/api/batches/daily-message', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
-      body: JSON.stringify({ batch_id: dailyBatch.id, override_date: daily.override_date }),
+      body: JSON.stringify({ ...(bid ? { batch_id: bid } : {}), override_date: daily.override_date }),
     })
     setDailySaving(false)
     setDaily({ ...daily, send_default: true, custom_enabled: false, custom_message: '' })
-    setDailyMsg(res.ok ? 'Reset to default reminder.' : 'Failed to reset')
+    setDailyMsg(res.ok ? 'Reset to default.' : 'Failed to reset')
   }
 
   async function handleNotify() {
@@ -281,6 +302,14 @@ export default function BatchesPage() {
           </button>
         </div>
 
+        <button onClick={() => openDaily({ scope: 'institute' })}
+          className="w-full mb-4 flex items-center gap-2 justify-center bg-blue-50 text-blue-700 text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-blue-100 transition">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+          </svg>
+          Set message for all batches (day-wide)
+        </button>
+
         <div className="space-y-3">
           {batches.map(b => (
             <div key={b.id} className="bg-white rounded-xl shadow-sm p-4">
@@ -300,7 +329,7 @@ export default function BatchesPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 ml-2 shrink-0">
-                  <button onClick={() => openDaily(b)} title="Today's message"
+                  <button onClick={() => openDaily({ scope: 'batch', id: b.id, name: b.name })} title="Today's message"
                     className="p-1.5 text-gray-400 hover:text-blue-600 transition">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -376,21 +405,30 @@ export default function BatchesPage() {
         </form>
       </BottomSheet>
 
-      {/* Today's message override sheet */}
-      <BottomSheet open={dailyBatch !== null} onClose={() => setDailyBatch(null)} title="Daily Message">
+      {/* Today's message override sheet (batch scope or institute-wide) */}
+      <BottomSheet open={dailyTarget !== null} onClose={() => setDailyTarget(null)}
+        title={dailyTarget?.scope === 'institute' ? 'All Batches — Daily Message' : 'Daily Message'}>
         <div className="space-y-4">
           <p className="text-sm text-gray-500">
-            Customise what parents of <span className="font-medium text-gray-800">{dailyBatch?.name}</span> receive on a given day.
-            Set it before the daily reminder goes out (09:00 IST).
+            {dailyTarget?.scope === 'institute'
+              ? <>Applies to <span className="font-medium text-gray-800">every batch with class</span> on the chosen day. A batch with its own setting overrides this.</>
+              : <>Customise what parents of <span className="font-medium text-gray-800">{dailyTarget?.scope === 'batch' ? dailyTarget.name : ''}</span> receive on a given day.</>}
+            {' '}Set it before the daily reminder goes out (09:00 IST).
           </p>
 
           <div className="space-y-1">
             <p className="text-xs text-gray-400 pl-0.5">Date</p>
             <input type="date" value={daily.override_date}
               min={istToday()}
-              onChange={e => { const d = e.target.value; setDaily({ ...daily, override_date: d }); setDailyMsg(''); if (dailyBatch) loadDaily(dailyBatch.id, d) }}
+              onChange={e => { const d = e.target.value; setDaily({ ...daily, override_date: d }); setDailyMsg(''); if (dailyTarget) loadDaily(dailyTarget, d) }}
               className="w-full border rounded-lg px-3 py-2 text-sm bg-white" />
           </div>
+
+          {dailyTarget?.scope === 'batch' && dayWideActive && (
+            <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+              An all-batch message is set for this day. What you save here overrides it for this batch.
+            </p>
+          )}
 
           {dailyLoading ? (
             <p className="text-sm text-gray-400 py-4 text-center">Loading...</p>

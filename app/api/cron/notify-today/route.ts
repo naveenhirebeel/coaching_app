@@ -3,7 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { todayClassMessage, customNoteMessage, sendTrackedMessage } from '@/lib/telegram'
 
 type DailyOverride = {
-  batch_id: string
+  institute_id: string
+  batch_id: string | null // NULL = institute-wide day setting
   send_default: boolean
   custom_enabled: boolean
   custom_message: string | null
@@ -39,15 +40,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'DB error' }, { status: 500 })
   }
 
-  // Per-batch overrides configured by admins for today (default toggle + custom note)
+  // Overrides configured by admins for today. Two scopes:
+  //   batch_id set  -> per-batch (wins)
+  //   batch_id null -> institute-wide day setting (applies to all that institute's batches)
   const { data: overrides } = await supabaseAdmin
     .from('daily_batch_messages')
-    .select('batch_id, send_default, custom_enabled, custom_message')
+    .select('institute_id, batch_id, send_default, custom_enabled, custom_message')
     .eq('override_date', todayDate)
 
-  const overrideByBatch = new Map<string, DailyOverride>(
-    (overrides || []).map(o => [o.batch_id, o as DailyOverride])
-  )
+  const overrideByBatch = new Map<string, DailyOverride>()
+  const overrideByInstitute = new Map<string, DailyOverride>()
+  for (const o of (overrides || []) as DailyOverride[]) {
+    if (o.batch_id) overrideByBatch.set(o.batch_id, o)
+    else overrideByInstitute.set(o.institute_id, o)
+  }
 
   let totalSent = 0
   let totalSkipped = 0
@@ -61,7 +67,9 @@ export async function GET(req: NextRequest) {
     const classTime = `${fmt12(todaySlot.start)} – ${fmt12(todaySlot.end)}`
     const instituteName = (batch.institutes as unknown as { name: string } | null)?.name || 'Institute'
 
-    const override = overrideByBatch.get(batch.id)
+    // Precedence: per-batch row wins over the institute-wide day setting, which
+    // wins over the built-in default. No merging between scopes.
+    const override = overrideByBatch.get(batch.id) ?? overrideByInstitute.get(batch.institute_id)
     const sendDefault = override ? override.send_default : true
     const customText = override?.custom_enabled && override.custom_message?.trim()
       ? override.custom_message.trim()
